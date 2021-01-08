@@ -188,7 +188,6 @@ public:
 	CPed         *m_pLastPedLookedAt;// So interpolation works 
 	bool        m_bFirstPersonRunAboutActive;
 
-
 	CCam(void) { Init(); }
 	void Init(void);
 	void Process(void);
@@ -214,7 +213,9 @@ public:
 	void PrintMode(void);
 
 	void Process_Debug(const CVector&, float, float, float);
+#ifdef GTA_SCENE_EDIT
 	void Process_Editor(const CVector&, float, float, float);
+#endif
 	void Process_ModelView(const CVector &CameraTarget, float, float, float);
 	void Process_FollowPed(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_FollowPedWithMouse(const CVector &CameraTarget, float TargetOrientation, float, float);
@@ -250,7 +251,7 @@ public:
 	// CCam::Process_Look_At_Cars
 	// CCam::Process_CheesyZoom
 	// CCam::Process_Aiming
-	// CCam::Process_Bill	// same as BehindCar due to unused variables
+	void Process_Bill(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar);
 	void Process_Im_The_Passenger_Woo_Woo(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_Blood_On_The_Tracks(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_Cam_Running_Side_Train(const CVector &CameraTarget, float TargetOrientation, float, float);
@@ -312,16 +313,16 @@ enum
 
 enum
 {
-	MBLUR_NONE,
-	MBLUR_SNIPER,
-	MBLUR_NORMAL,
-	MBLUR_INTRO1,		// green camera
-	MBLUR_INTRO2,		// unused
-	MBLUR_INTRO3,		// bank scene
-	MBLUR_INTRO4,		// jail break scene
-	MBLUR_INTRO5,		// explosion
-	MBLUR_INTRO6,		// player shot
-	MBLUR_UNUSED,		// pinkish
+	MOTION_BLUR_NONE = 0,
+	MOTION_BLUR_SNIPER,
+	MOTION_BLUR_LIGHT_SCENE,
+	MOTION_BLUR_SECURITY_CAM,
+	MOTION_BLUR_CUT_SCENE,
+	MOTION_BLUR_INTRO,
+	MOTION_BLUR_INTRO2,
+	MOTION_BLUR_SNIPER_ZOOM,
+	MOTION_BLUR_INTRO3,
+	MOTION_BLUR_INTRO4,
 };
 
 enum
@@ -349,7 +350,7 @@ public:
 	bool m_bcutsceneFinished;
 	bool m_bCullZoneChecksOn;
 	bool m_bFirstPersonBeingUsed;
-	bool m_bJustJumpedOutOf1stPersonBecauseOfTarget;
+	bool m_bUnknown;
 	bool m_bIdleOn;
 	bool m_bInATunnelAndABigVehicle;
 	bool m_bInitialNodeFound;
@@ -426,9 +427,12 @@ public:
 	float CarZoomValueSmooth;
 
 	float DistanceToWater;
+#ifndef PS2_CAM_TRANSITION
 	float FOVDuringInter;
+#endif
 	float LODDistMultiplier;
 	float GenerationDistMultiplier;
+#ifndef PS2_CAM_TRANSITION
 	float m_fAlphaSpeedAtStartInter;
 	float m_fAlphaWhenInterPol;
 	float m_fAlphaDuringInterPol;
@@ -439,6 +443,7 @@ public:
 	float m_fFOVSpeedAtStartInter;
 	float m_fStartingBetaForInterPol;
 	float m_fStartingAlphaForInterPol;
+#endif
 	float m_PedOrientForBehindOrInFront;
 	float m_CameraAverageSpeed;
 	float m_CameraSpeedSoFar;
@@ -488,7 +493,7 @@ public:
 	CVector m_vecFixedModeSource;
 	CVector m_vecFixedModeUpOffSet;
 	CVector m_vecCutSceneOffset;
-
+#ifndef PS2_CAM_TRANSITION
 	CVector m_cvecStartingSourceForInterPol;
 	CVector m_cvecStartingTargetForInterPol;
 	CVector m_cvecStartingUpForInterPol;
@@ -498,11 +503,13 @@ public:
 	CVector m_vecSourceWhenInterPol;
 	CVector m_vecTargetWhenInterPol;
 	CVector m_vecUpWhenInterPol;
-
+#endif
 	CVector m_vecGameCamPos;
+#ifndef PS2_CAM_TRANSITION
 	CVector SourceDuringInter;
 	CVector TargetDuringInter;
 	CVector UpDuringInter;
+#endif
 	RwCamera *m_pRwCamera;
 	CEntity *pTargetEntity;
 	CCamPathSplines m_arrPathArray[MAX_NUM_OF_SPLINETYPES];
@@ -518,7 +525,6 @@ public:
 	CVector m_vecOldSourceForInter;
 	CVector m_vecOldFrontForInter;
 	CVector m_vecOldUpForInter;
-
 	float m_vecOldFOVForInter;
 	float m_fFLOATingFade;
 	float m_fFLOATingFadeMusic;
@@ -624,7 +630,7 @@ public:
 	void SetNewPlayerWeaponMode(int16 mode, int16 minZoom, int16 maxZoom);
 	void ClearPlayerWeaponMode(void);
 	void UpdateAimingCoors(CVector const &coors);
-	void Find3rdPersonCamTargetVector(float dist, CVector pos, CVector &source, CVector &target);
+	bool Find3rdPersonCamTargetVector(float dist, CVector pos, CVector &source, CVector &target);
 	float Find3rdPersonQuickAimPitch(void);
 
 	// Physical camera

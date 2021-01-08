@@ -4,6 +4,7 @@
 #include <direct.h>
 #endif
 #include "common.h"
+#include "crossplatform.h"
 
 #include "FileMgr.h"
 
@@ -31,19 +32,16 @@ static myFILE myfiles[NUMFILES];
 #include <dirent.h>
 #include <errno.h>
 #include <unistd.h>
-#include "crossplatform.h"
 #define _getcwd getcwd
 
 // Case-insensitivity on linux (from https://github.com/OneSadCookie/fcaseopen)
 void mychdir(char const *path)
 {
-    char *r = (char*)alloca(strlen(path) + 2);
-    if (casepath(path, r))
-    {
+	char* r = casepath(path, false);
+    if (r) {
         chdir(r);
-    }
-    else
-    {
+		free(r);
+    } else {
         errno = ENOENT;
     }
 }
@@ -73,30 +71,7 @@ found:
 	*p++ = 'b';
 	*p = '\0';
 	
-#if !defined(_WIN32)
-	char *newPath = strdup(filename);
-	// Normally casepath() fixes backslashes, but if the mode is sth other than r/rb it will create new file with backslashes on linux, so fix backslashes here
-	char *nextBs;
-	while(nextBs = strstr(newPath, "\\")){
-		*nextBs = '/';
-	}
-#else
-	const char *newPath = filename;
-#endif
-
-	myfiles[fd].file = fopen(newPath, realmode);
-// Be case-insensitive on linux (from https://github.com/OneSadCookie/fcaseopen/)
-#if !defined(_WIN32)
-	if (!myfiles[fd].file) {
-		char *r = (char*)alloca(strlen(newPath) + 2);
-		if (casepath(newPath, r))
-		{
-		    myfiles[fd].file = fopen(r, realmode);
-		}
-	}
-
-	free(newPath);
-#endif
+	myfiles[fd].file = fcaseopen(filename, realmode);
 	if(myfiles[fd].file == nil)
 		return 0;
 	return fd;
@@ -163,37 +138,37 @@ myfgets(char *buf, int len, int fd)
 	return buf;
 }
 
-static int
+static size_t
 myfread(void *buf, size_t elt, size_t n, int fd)
 {
 	if(myfiles[fd].isText){
-		char *p;
+		unsigned char *p;
 		size_t i;
 		int c;
 
 		n *= elt;
-		p = (char*)buf;
+		p = (unsigned char*)buf;
 		for(i = 0; i < n; i++){
 			c = myfgetc(fd);
 			if(c == EOF)
 				break;
-			*p++ = c;
+			*p++ = (unsigned char)c;
 		}
 		return i / elt;
 	}
 	return fread(buf, elt, n, myfiles[fd].file);
 }
 
-static int
+static size_t
 myfwrite(void *buf, size_t elt, size_t n, int fd)
 {
 	if(myfiles[fd].isText){
-		char *p;
+		unsigned char *p;
 		size_t i;
 		int c;
 
 		n *= elt;
-		p = (char*)buf;
+		p = (unsigned char*)buf;
 		for(i = 0; i < n; i++){
 			c = *p++;
 			myfputc(c, fd);
@@ -265,21 +240,24 @@ CFileMgr::SetDirMyDocuments(void)
 	mychdir(_psGetUserFilesFolder());
 }
 
-int
-CFileMgr::LoadFile(const char *file, uint8 *buf, int unused, const char *mode)
+ssize_t
+CFileMgr::LoadFile(const char *file, uint8 *buf, int maxlen, const char *mode)
 {
 	int fd;
-	int n, len;
+	ssize_t n, len;
 
 	fd = myfopen(file, mode);
 	if(fd == 0)
-		return 0;
+		return -1;
 	len = 0;
 	do{
 		n = myfread(buf + len, 1, 0x4000, fd);
-		if(n < 0)
+#ifndef FIX_BUGS
+		if (n < 0)
 			return -1;
+#endif
 		len += n;
+		assert(len < maxlen);
 	}while(n == 0x4000);
 	buf[len] = 0;
 	myfclose(fd);
@@ -298,14 +276,14 @@ CFileMgr::OpenFileForWriting(const char *file)
 	return OpenFile(file, "wb");
 }
 
-int
-CFileMgr::Read(int fd, const char *buf, int len)
+size_t
+CFileMgr::Read(int fd, const char *buf, ssize_t len)
 {
 	return myfread((void*)buf, 1, len, fd);
 }
 
-int
-CFileMgr::Write(int fd, const char *buf, int len)
+size_t
+CFileMgr::Write(int fd, const char *buf, ssize_t len)
 {
 	return myfwrite((void*)buf, 1, len, fd);
 }

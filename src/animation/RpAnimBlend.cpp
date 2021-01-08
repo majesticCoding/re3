@@ -8,6 +8,7 @@
 #include "AnimBlendClumpData.h"
 #include "AnimBlendHierarchy.h"
 #include "AnimBlendAssociation.h"
+#include "AnimManager.h"
 #include "RpAnimBlend.h"
 #ifdef PED_SKIN
 #include "PedModelInfo.h"
@@ -170,7 +171,7 @@ RpAnimBlendClumpInitSkinned(RpClump *clump)
 	for(i = 0; i < numBones; i++){
 		frames[i].nodeID = HIERNODEID(hier, i);
 		frames[i].resetPos = boneTab[i];
-		frames[i].hanimFrame = (RpHAnimStdKeyFrame*)rpHANIMHIERARCHYGETINTERPFRAME(hier, i);
+		frames[i].hanimFrame = (RpHAnimStdInterpFrame*)rpHANIMHIERARCHYGETINTERPFRAME(hier, i);
 	}
 	clumpData->ForAllFrames(FrameInitCBskin, nil);
 	clumpData->frames[0].flag |= AnimBlendFrameData::VELOCITY_EXTRACTION;
@@ -441,7 +442,7 @@ RpAnimBlendClumpUpdateAnimations(RpClump *clump, float timeDelta)
 		next = link->next;
 		CAnimBlendAssociation *assoc = CAnimBlendAssociation::FromLink(link);
 		if(assoc->UpdateBlend(timeDelta)){
-			// CAnimManager::UncompressAnimation(v6->hierarchy)
+			CAnimManager::UncompressAnimation(assoc->hierarchy);
 			updateData.nodes[i++] = assoc->GetNode(0);
 			if(assoc->flags & ASSOC_MOVEMENT){
 				totalLength += assoc->hierarchy->totalLength/assoc->speed * assoc->blendAmount;

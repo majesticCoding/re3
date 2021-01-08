@@ -2,7 +2,6 @@
 #define WITHWINDOWS
 #include "common.h"
 #include "crossplatform.h"
-#include "patcher.h"
 #include "Renderer.h"
 #include "Credits.h"
 #include "Camera.h"
@@ -16,8 +15,6 @@
 #include "Boat.h"
 #include "Heli.h"
 #include "Automobile.h"
-#include "Ped.h"
-#include "Particle.h"
 #include "Console.h"
 #include "Debug.h"
 #include "Hud.h"
@@ -27,16 +24,22 @@
 #include "Radar.h"
 #include "debugmenu.h"
 #include "Frontend.h"
-#include "Text.h"
 #include "WaterLevel.h"
 #include "main.h"
+#include "Script.h"
+#include "postfx.h"
+#include "custompipes.h"
+#include "MemoryHeap.h"
+#include "FileMgr.h"
+
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+#include "ControllerConfig.h"
+#endif
 
 #ifndef _WIN32
 #include "assert.h"
 #include <stdarg.h>
 #endif
-
-#include <list>
 
 #ifdef RWLIBS
 extern "C" int vsprintf(char* const _Buffer, char const* const _Format, va_list  _ArgList);
@@ -71,97 +74,190 @@ mysrand(unsigned int seed)
 
 #ifdef CUSTOM_FRONTEND_OPTIONS
 #include "frontendoption.h"
-#include "platform.h"
 
-void ReloadFrontendOptions(void)
-{
-	RemoveCustomFrontendOptions();
-	CustomFrontendOptionsPopulate();
-}
-
-#ifdef MORE_LANGUAGES
-void LangPolSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = LANGUAGE_POLISH;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-
-void LangRusSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = LANGUAGE_RUSSIAN;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-
-void LangJapSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = LANGUAGE_JAPANESE;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-#ifdef IMPROVED_VIDEOMODE
-void ScreenModeChange(int8 displayedValue)
-{
-	if (displayedValue != FrontEndMenuManager.m_nPrefsWindowed) {
-		FrontEndMenuManager.m_nPrefsWindowed = displayedValue;
-		_psSelectScreenVM(FrontEndMenuManager.m_nPrefsVideoMode); // apply same resolution
-		FrontEndMenuManager.SetHelperText(0);
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-#ifdef FREE_CAM
-void ToggleFreeCam(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		TheCamera.bFreeCam = !TheCamera.bFreeCam;
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-// Reloaded on language change, so you can use hardcoded wchar* and TheText.Get with peace of mind
 void
 CustomFrontendOptionsPopulate(void)
 {
-#ifdef MORE_LANGUAGES
-	FrontendOptionSetPosition(MENUPAGE_LANGUAGE_SETTINGS);
-	FrontendOptionAddDynamic(TheText.Get("FEL_POL"), nil, LangPolSelect, nil);
-	FrontendOptionAddDynamic(TheText.Get("FEL_RUS"), nil, LangRusSelect, nil);
-	FrontendOptionAddDynamic(TheText.Get("FEL_JAP"), nil, LangJapSelect, nil);
+	// Moved to an array in MenuScreensCustom.cpp, but APIs are still available. see frontendoption.h
+
+	// These work only if we have neo folder, so they're dynamically added
+#ifdef EXTENDED_PIPELINES
+	const char *vehPipelineNames[] = { "FED_MFX", "FED_NEO" };
+	const char *off_on[] = { "FEM_OFF", "FEM_ON" };
+	int fd = CFileMgr::OpenFile("neo/neo.txd","r");
+	if (fd) {
+#ifdef GRAPHICS_MENU_OPTIONS
+		FrontendOptionSetCursor(MENUPAGE_GRAPHICS_SETTINGS, -3, false);
+		FrontendOptionAddSelect("FED_VPL", vehPipelineNames, ARRAY_SIZE(vehPipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "VehiclePipeline");
+		FrontendOptionAddSelect("FED_PRM", off_on, 2, (int8*)&CustomPipes::RimlightEnable, false, nil, "NeoRimLight");
+		FrontendOptionAddSelect("FED_WLM", off_on, 2, (int8*)&CustomPipes::LightmapEnable, false, nil, "NeoLightMaps");
+		FrontendOptionAddSelect("FED_RGL", off_on, 2, (int8*)&CustomPipes::GlossEnable, false, nil, "NeoRoadGloss");
+#else
+		FrontendOptionSetCursor(MENUPAGE_DISPLAY_SETTINGS, -3, false);
+		FrontendOptionAddSelect("FED_VPL", vehPipelineNames, ARRAY_SIZE(vehPipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "VehiclePipeline");
+		FrontendOptionAddSelect("FED_PRM", off_on, 2, (int8*)&CustomPipes::RimlightEnable, false, nil, "NeoRimLight");
+		FrontendOptionAddSelect("FED_WLM", off_on, 2, (int8*)&CustomPipes::LightmapEnable, false, nil, "NeoLightMaps");
+		FrontendOptionAddSelect("FED_RGL", off_on, 2, (int8*)&CustomPipes::GlossEnable, false, nil, "NeoRoadGloss");
+#endif
+		CFileMgr::CloseFile(fd);
+	}
 #endif
 
-#ifdef IMPROVED_VIDEOMODE
-	static const wchar *screenModes[] = { (wchar*)L"FULLSCREEN", (wchar*)L"WINDOWED" };
-	FrontendOptionSetPosition(MENUPAGE_GRAPHICS_SETTINGS, 8);
-	FrontendOptionAddSelect(TheText.Get("SCRFOR"), screenModes, 2, (int8*)&FrontEndMenuManager.m_nPrefsWindowed, true, ScreenModeChange, nil);
-#endif
-
-#ifdef MENU_MAP
-	FrontendOptionSetPosition(MENUPAGE_PAUSE_MENU, 2);
-	FrontendOptionAddRedirect(TheText.Get("FEG_MAP"), MENUPAGE_MAP);
-#endif
-
-#ifdef FREE_CAM
-	static const wchar *text = (wchar*)L"TOGGLE FREE CAM";
-	FrontendOptionSetPosition(MENUPAGE_CONTROLLER_PC, 1);
-	FrontendOptionAddDynamic(text, nil, ToggleFreeCam, nil);
-#endif
 }
 #endif
+
+#ifdef LOAD_INI_SETTINGS
+#include "ini_parser.hpp"
+
+linb::ini cfg;
+int CheckAndReadIniInt(const char *cat, const char *key, int original)
+{
+	std::string strval = cfg.get(cat, key, "");
+	const char *value = strval.c_str();
+	if (value && value[0] != '\0')
+		return atoi(value);
+
+	return original;
+}
+
+float CheckAndReadIniFloat(const char *cat, const char *key, float original)
+{
+	std::string strval = cfg.get(cat, key, "");
+	const char *value = strval.c_str();
+	if (value && value[0] != '\0')
+		return atof(value);
+
+	return original;
+}
+
+void CheckAndSaveIniInt(const char *cat, const char *key, int val, bool &changed)
+{
+	char temp[10];
+	if (atoi(cfg.get(cat, key, "xxx").c_str()) != val) { // if .ini doesn't have our key, compare with xxx and forcefully add it
+		changed = true;
+		sprintf(temp, "%u", val);
+		cfg.set(cat, key, temp);
+	}
+}
+
+void CheckAndSaveIniFloat(const char *cat, const char *key, float val, bool &changed)
+{
+	char temp[10];
+	if (atof(cfg.get(cat, key, "xxx").c_str()) != val) { // if .ini doesn't have our key, compare with xxx and forcefully add it
+		changed = true;
+		sprintf(temp, "%f", val);
+		cfg.set(cat, key, temp);
+	}
+}
+
+void LoadINISettings()
+{
+	cfg.load_file("re3.ini");
+
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+	// Written by assuming the codes below will run after _InputInitialiseJoys().
+	strcpy(gSelectedJoystickName, cfg.get("DetectJoystick", "JoystickName", "").c_str());
+	
+	if(gSelectedJoystickName[0] != '\0') {
+		for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++) {
+			if (glfwJoystickPresent(i) && strncmp(gSelectedJoystickName, glfwGetJoystickName(i), strlen(gSelectedJoystickName)) == 0) {
+				if (PSGLOBAL(joy1id) != -1) {
+					PSGLOBAL(joy2id) = PSGLOBAL(joy1id);
+				}
+				PSGLOBAL(joy1id) = i;
+				int count;
+				glfwGetJoystickButtons(PSGLOBAL(joy1id), &count);
+				
+				// We need to init and reload bindings, because;
+				//	1-joypad button number may differ with saved/prvly connected one
+				//	2-bindings are not init'ed if there is no joypad at the start
+				ControlsManager.InitDefaultControlConfigJoyPad(count);
+				CFileMgr::SetDirMyDocuments();
+				int32 gta3set = CFileMgr::OpenFile("gta3.set", "r");
+				if (gta3set) {
+					ControlsManager.LoadSettings(gta3set);
+					CFileMgr::CloseFile(gta3set);
+				}
+				CFileMgr::SetDir("");
+				break;
+			}
+		}
+	}
+#endif
+
+#ifdef CUSTOM_FRONTEND_OPTIONS
+	for (int i = 0; i < MENUPAGES; i++) {
+		for (int j = 0; j < NUM_MENUROWS; j++) {
+			CMenuScreenCustom::CMenuEntry &option = aScreens[i].m_aEntries[j];
+			if (option.m_Action == MENUACTION_NOTHING)
+				break;
+				
+			// CFO check
+			if (option.m_Action < MENUACTION_NOTHING && option.m_CFO->save) {
+				// CFO only supports saving uint8 right now
+				*option.m_CFO->value = CheckAndReadIniInt("FrontendOptions", option.m_CFO->save, *option.m_CFO->value);
+				if (option.m_Action == MENUACTION_CFO_SELECT) {
+					option.m_CFOSelect->lastSavedValue = option.m_CFOSelect->displayedValue = *option.m_CFO->value;
+				}
+			}
+		}
+	}
+#endif
+
+#ifdef EXTENDED_COLOURFILTER
+	CPostFX::Intensity = CheckAndReadIniFloat("CustomPipesValues", "PostFXIntensity", CPostFX::Intensity);
+#endif
+#ifdef EXTENDED_PIPELINES
+	CustomPipes::VehicleShininess = CheckAndReadIniFloat("CustomPipesValues", "NeoVehicleShininess", CustomPipes::VehicleShininess);
+	CustomPipes::VehicleSpecularity = CheckAndReadIniFloat("CustomPipesValues", "NeoVehicleSpecularity", CustomPipes::VehicleSpecularity);
+	CustomPipes::RimlightMult = CheckAndReadIniFloat("CustomPipesValues", "RimlightMult", CustomPipes::RimlightMult);
+	CustomPipes::LightmapMult = CheckAndReadIniFloat("CustomPipesValues", "LightmapMult", CustomPipes::LightmapMult);
+	CustomPipes::GlossMult = CheckAndReadIniFloat("CustomPipesValues", "GlossMult", CustomPipes::GlossMult);
+#endif
+}
+
+void SaveINISettings()
+{
+	bool changed = false;
+
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+	if (strncmp(cfg.get("DetectJoystick", "JoystickName", "").c_str(), gSelectedJoystickName, strlen(gSelectedJoystickName)) != 0) {
+		changed = true;
+		cfg.set("DetectJoystick", "JoystickName", gSelectedJoystickName);
+	}
+#endif
+#ifdef CUSTOM_FRONTEND_OPTIONS
+	for (int i = 0; i < MENUPAGES; i++) {
+		for (int j = 0; j < NUM_MENUROWS; j++) {
+			CMenuScreenCustom::CMenuEntry &option = aScreens[i].m_aEntries[j];
+			if (option.m_Action == MENUACTION_NOTHING)
+				break;
+				
+			if (option.m_Action < MENUACTION_NOTHING && option.m_CFO->save) {
+				// Beware: CFO only supports saving uint8 right now
+				CheckAndSaveIniInt("FrontendOptions", option.m_CFO->save, *option.m_CFO->value, changed);
+			}
+		}
+	}
+#endif
+
+#ifdef EXTENDED_COLOURFILTER
+	CheckAndSaveIniFloat("CustomPipesValues", "PostFXIntensity", CPostFX::Intensity, changed);
+#endif
+#ifdef EXTENDED_PIPELINES
+	CheckAndSaveIniFloat("CustomPipesValues", "NeoVehicleShininess", CustomPipes::VehicleShininess, changed);
+	CheckAndSaveIniFloat("CustomPipesValues", "NeoVehicleSpecularity", CustomPipes::VehicleSpecularity, changed);
+	CheckAndSaveIniFloat("CustomPipesValues", "RimlightMult", CustomPipes::RimlightMult, changed);
+	CheckAndSaveIniFloat("CustomPipesValues", "LightmapMult", CustomPipes::LightmapMult, changed);
+	CheckAndSaveIniFloat("CustomPipesValues", "GlossMult", CustomPipes::GlossMult, changed);
+#endif
+
+	if (changed)
+		cfg.write_file("re3.ini");
+}
+
+#endif
+
 
 #ifdef DEBUGMENU
 void WeaponCheat();
@@ -302,6 +398,19 @@ ResetCamStatics(void)
 	TheCamera.Cams[TheCamera.ActiveCam].ResetStatics = true;
 }
 
+#ifdef MISSION_SWITCHER
+int8 nextMissionToSwitch = 0;
+static void
+SwitchToMission(void)
+{
+	CTheScripts::SwitchToMission(nextMissionToSwitch);
+}
+#endif
+
+#ifdef USE_CUSTOM_ALLOCATOR
+static void ParseHeap(void) { gMainHeap.ParseHeap(); }
+#endif
+
 static const char *carnames[] = {
 	"landstal", "idaho", "stinger", "linerun", "peren", "sentinel", "patriot", "firetruk", "trash", "stretch", "manana", "infernus", "blista", "pony",
 	"mule", "cheetah", "ambulan", "fbicar", "moonbeam", "esperant", "taxi", "kuruma", "bobcat", "mrwhoop", "bfinject", "corpse", "police", "enforcer",
@@ -309,6 +418,8 @@ static const char *carnames[] = {
 	"bellyup", "mrwongs", "mafia", "yardie", "yakuza", "diablos", "columb", "hoods", "airtrain", "deaddodo", "speeder", "reefer", "panlant", "flatbed",
 	"yankee", "escape", "borgnine", "toyz", "ghost",
 };
+
+//#include <list>
 
 static CTweakVar** TweakVarsList;
 static int TweakVarsListSize = -1;
@@ -322,7 +433,7 @@ void CTweakVars::Add(CTweakVar *var)
 		TweakVarsListSize = 0;
 	}
 	if(TweakVarsListSize > 63)
-		TweakVarsList = (CTweakVar**) realloc(TweakVarsList, (TweakVarsListSize + 1) * sizeof(var));
+		TweakVarsList = (CTweakVar**) realloc(TweakVarsList, (TweakVarsListSize + 1) * sizeof(*var));
 
 	TweakVarsList[TweakVarsListSize++] = var;
 //	TweakVarsList.push_back(var);
@@ -443,12 +554,55 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Spawn", "Spawn Predator", [](){ SpawnCar(MI_PREDATOR); });
 
 		DebugMenuAddVarBool8("Render", "Draw hud", &CHud::m_Wants_To_Draw_Hud, nil);
-#ifdef LIBRW
 		DebugMenuAddVarBool8("Render", "PS2 Alpha test Emu", &gPS2alphaTest, nil);
-#endif
 		DebugMenuAddVarBool8("Render", "Frame limiter", &FrontEndMenuManager.m_PrefsFrameLimiter, nil);
 		DebugMenuAddVarBool8("Render", "VSynch", &FrontEndMenuManager.m_PrefsVsync, nil);
 		DebugMenuAddVar("Render", "Max FPS", &RsGlobal.maxFPS, nil, 1, 1, 1000, nil);
+#ifdef NEW_RENDERER
+		DebugMenuAddVarBool8("Render", "new renderer", &gbNewRenderer, nil);
+extern bool gbRenderRoads;
+extern bool gbRenderEverythingBarRoads;
+//extern bool gbRenderFadingInUnderwaterEntities;
+extern bool gbRenderFadingInEntities;
+extern bool gbRenderWater;
+extern bool gbRenderBoats;
+extern bool gbRenderVehicles;
+extern bool gbRenderWorld0;
+extern bool gbRenderWorld1;
+extern bool gbRenderWorld2;
+		DebugMenuAddVarBool8("Render", "gbRenderRoads", &gbRenderRoads, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderEverythingBarRoads", &gbRenderEverythingBarRoads, nil);
+//		DebugMenuAddVarBool8("Render", "gbRenderFadingInUnderwaterEntities", &gbRenderFadingInUnderwaterEntities, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderFadingInEntities", &gbRenderFadingInEntities, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderWater", &gbRenderWater, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderBoats", &gbRenderBoats, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderVehicles", &gbRenderVehicles, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderWorld0", &gbRenderWorld0, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderWorld1", &gbRenderWorld1, nil);
+		DebugMenuAddVarBool8("Render", "gbRenderWorld2", &gbRenderWorld2, nil);
+#endif
+
+#ifdef EXTENDED_COLOURFILTER
+		static const char *filternames[] = { "None", "Simple", "Normal", "Mobile" };
+		e = DebugMenuAddVar("Render", "Colourfilter", &CPostFX::EffectSwitch, nil, 1, CPostFX::POSTFX_OFF, CPostFX::POSTFX_MOBILE, filternames);
+		DebugMenuEntrySetWrap(e, true);
+		DebugMenuAddVar("Render", "Intensity", &CPostFX::Intensity, nil, 0.05f, 0, 10.0f);
+		DebugMenuAddVarBool8("Render", "Motion Blur", &CPostFX::MotionBlurOn, nil);
+#endif
+#ifdef EXTENDED_PIPELINES
+		static const char *vehpipenames[] = { "MatFX", "Neo" };
+		e = DebugMenuAddVar("Render", "Vehicle Pipeline", &CustomPipes::VehiclePipeSwitch, nil,
+			1, CustomPipes::VEHICLEPIPE_MATFX, CustomPipes::VEHICLEPIPE_NEO, vehpipenames);
+		DebugMenuEntrySetWrap(e, true);
+		DebugMenuAddVar("Render", "Neo Vehicle Shininess", &CustomPipes::VehicleShininess, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVar("Render", "Neo Vehicle Specularity", &CustomPipes::VehicleSpecularity, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVarBool8("Render", "Neo Ped Rim light enable", &CustomPipes::RimlightEnable, nil);
+		DebugMenuAddVar("Render", "Mult", &CustomPipes::RimlightMult, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVarBool8("Render", "Neo World Lightmaps enable", &CustomPipes::LightmapEnable, nil);
+		DebugMenuAddVar("Render", "Mult", &CustomPipes::LightmapMult, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVarBool8("Render", "Neo Road Gloss enable", &CustomPipes::GlossEnable, nil);
+		DebugMenuAddVar("Render", "Mult", &CustomPipes::GlossMult, nil, 0.1f, 0, 1.0f);
+#endif
 		DebugMenuAddVarBool8("Render", "Show Ped Paths", &gbShowPedPaths, nil);
 		DebugMenuAddVarBool8("Render", "Show Car Paths", &gbShowCarPaths, nil);
 		DebugMenuAddVarBool8("Render", "Show Car Path Links", &gbShowCarPathsLinks, nil);
@@ -463,8 +617,19 @@ DebugMenuPopulate(void)
 		DebugMenuAddVarBool8("Render", "Don't render Objects", &gbDontRenderObjects, nil);
 		DebugMenuAddVarBool8("Render", "Don't Render Water", &gbDontRenderWater, nil);
 
+#ifndef FINAL
+		DebugMenuAddVarBool8("Debug", "Print Memory Usage", &gbPrintMemoryUsage, nil);
+#ifdef USE_CUSTOM_ALLOCATOR
+		DebugMenuAddCmd("Debug", "Parse Heap", ParseHeap);
+#endif
+#endif
+		DebugMenuAddVarBool8("Debug", "Show cullzone debug stuff", &gbShowCullZoneDebugStuff, nil);
+		DebugMenuAddVarBool8("Debug", "Disable zone cull", &gbDisableZoneCull, nil);
+
 		DebugMenuAddVarBool8("Debug", "pad 1 -> pad 2", &CPad::m_bMapPadOneToPadTwo, nil);
+#ifdef GTA_SCENE_EDIT
 		DebugMenuAddVarBool8("Debug", "Edit on", &CSceneEdit::m_bEditOn, nil);
+#endif
 #ifdef MENU_MAP
 		DebugMenuAddCmd("Debug", "Teleport to map waypoint", TeleportToWaypoint);
 #endif
@@ -481,20 +646,36 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Debug", "Catalina Fly Away", CHeli::MakeCatalinaHeliFlyAway);
 		DebugMenuAddVarBool8("Debug", "Script Heli On", &CHeli::ScriptHeliOn, nil);
 
-#ifdef CUSTOM_FRONTEND_OPTIONS
-		DebugMenuAddCmd("Debug", "Reload custom frontend options", ReloadFrontendOptions);
-#endif
-#ifdef TOGGLEABLE_BETA_FEATURES
 		DebugMenuAddVarBool8("Debug", "Toggle popping heads on headshot", &CPed::bPopHeadsOnHeadshot, nil);
-		DebugMenuAddVarBool8("Debug", "Toggle peds running to phones to report crimes", &CPed::bMakePedsRunToPhonesToReportCrimes, nil);
-#endif
-
 		DebugMenuAddCmd("Debug", "Start Credits", CCredits::Start);
 		DebugMenuAddCmd("Debug", "Stop Credits", CCredits::Stop);
 
 		DebugMenuAddVarBool8("Debug", "Show DebugStuffInRelease", &gbDebugStuffInRelease, nil);
 #ifdef TIMEBARS
 		DebugMenuAddVarBool8("Debug", "Show Timebars", &gbShowTimebars, nil);
+#endif
+#ifdef MISSION_SWITCHER
+		DebugMenuEntry *missionEntry;
+		static const char* missions[] = {
+			"Intro Movie", "Hospital Info Scene", "Police Station Info Scene",
+			"RC Diablo Destruction", "RC Mafia Massacre", "RC Rumpo Rampage", "RC Casino Calamity",
+			"Patriot Playground", "A Ride In The Park", "Gripped!", "Multistorey Mayhem",
+			"Paramedic", "Firefighter", "Vigilante", "Taxi Driver",
+			"The Crook", "The Thieves", "The Wife", "Her Lover",
+			"Give Me Liberty and Luigi's Girls", "Don't Spank My Bitch Up", "Drive Misty For Me", "Pump-Action Pimp", "The Fuzz Ball",
+			"Mike Lips Last Lunch", "Farewell 'Chunky' Lee Chong", "Van Heist", "Cipriani's Chauffeur", "Dead Skunk In The Trunk", "The Getaway",
+			"Taking Out The Laundry", "The Pick-Up", "Salvatore's Called A Meeting", "Triads And Tribulations", "Blow Fish", "Chaperone", "Cutting The Grass",
+			"Bomb Da Base: Act I", "Bomb Da Base: Act II", "Last Requests", "Turismo", "I Scream, You Scream", "Trial By Fire", "Big'N'Veiny", "Sayonara Salvatore",
+			"Under Surveillance", "Paparazzi Purge", "Payday For Ray", "Two-Faced Tanner", "Kanbu Bust-Out", "Grand Theft Auto", "Deal Steal", "Shima", "Smack Down",
+			"Silence The Sneak", "Arms Shortage", "Evidence Dash", "Gone Fishing", "Plaster Blaster", "Marked Man",
+			"Liberator", "Waka-Gashira Wipeout!", "A Drop In The Ocean", "Bling-Bling Scramble", "Uzi Rider", "Gangcar Round-Up", "Kingdom Come",
+			"Grand Theft Aero", "Escort Service", "Decoy", "Love's Disappearance", "Bait", "Espresso-2-Go!", "S.A.M.",
+			"Uzi Money", "Toyminator", "Rigged To Blow", "Bullion Run", "Rumble", "The Exchange"
+		};
+
+		missionEntry = DebugMenuAddVar("Debug", "Select mission", &nextMissionToSwitch, nil, 1, 0, 79, missions);
+		DebugMenuEntrySetWrap(missionEntry, true);
+		DebugMenuAddCmd("Debug", "Start selected mission ", SwitchToMission);
 #endif
 
 		extern bool PrintDebugCode;

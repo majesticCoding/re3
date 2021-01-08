@@ -13,6 +13,9 @@
 CShotInfo gaShotInfo[NUMSHOTINFOS];
 float CShotInfo::ms_afRandTable[20];
 
+#ifdef SQUEEZE_PERFORMANCE
+uint32 shotInfoInUse;
+#endif
 
 /*
 	Used for flamethrower. I don't know why it's name is CShotInfo.
@@ -41,6 +44,9 @@ CShotInfo::Initialise()
 		nextVal += 0.005f;
 	}
 	debug("CShotInfo ready\n");
+#ifdef SQUEEZE_PERFORMANCE
+	shotInfoInUse = 0;
+#endif
 }
 
 bool
@@ -54,6 +60,10 @@ CShotInfo::AddShot(CEntity *sourceEntity, eWeaponType weapon, CVector startPos, 
 	if (slot == ARRAY_SIZE(gaShotInfo))
 		return false;
 
+#ifdef SQUEEZE_PERFORMANCE
+	shotInfoInUse++;
+#endif
+
 	gaShotInfo[slot].m_inUse = true;
 	gaShotInfo[slot].m_weapon = weapon;
 	gaShotInfo[slot].m_startPos = startPos;
@@ -66,7 +76,7 @@ CShotInfo::AddShot(CEntity *sourceEntity, eWeaponType weapon, CVector startPos, 
 		gaShotInfo[slot].m_areaAffected.z += CShotInfo::ms_afRandTable[CGeneral::GetRandomNumber() % ARRAY_SIZE(ms_afRandTable)];
 	}
 	gaShotInfo[slot].m_areaAffected.Normalise();
-	if (weaponInfo->m_bRandSpeed)
+	if (weaponInfo->IsFlagSet(WEAPONFLAG_RAND_SPEED))
 		gaShotInfo[slot].m_areaAffected *= CShotInfo::ms_afRandTable[CGeneral::GetRandomNumber() % ARRAY_SIZE(ms_afRandTable)] + weaponInfo->m_fSpeed;
 	else
 		gaShotInfo[slot].m_areaAffected *= weaponInfo->m_fSpeed;
@@ -87,6 +97,10 @@ CShotInfo::Shutdown()
 void
 CShotInfo::Update()
 {
+#ifdef SQUEEZE_PERFORMANCE
+	if (shotInfoInUse == 0)
+		return;
+#endif
 	for (int slot = 0; slot < ARRAY_SIZE(gaShotInfo); slot++) {
 		CShotInfo &shot = gaShotInfo[slot];
 		if (shot.m_sourceEntity && shot.m_sourceEntity->IsPed() && !((CPed*)shot.m_sourceEntity)->IsPointerValid())
@@ -96,13 +110,17 @@ CShotInfo::Update()
 			continue;
 
 		CWeaponInfo *weaponInfo = CWeaponInfo::GetWeaponInfo(shot.m_weapon);
-		if (CTimer::GetTimeInMilliseconds() > shot.m_timeout)
+		if (CTimer::GetTimeInMilliseconds() > shot.m_timeout) {
+#ifdef SQUEEZE_PERFORMANCE
+			shotInfoInUse--;
+#endif
 			shot.m_inUse = false;
+		}
 
-		if (weaponInfo->m_bSlowsDown)
+		if (weaponInfo->IsFlagSet(WEAPONFLAG_SLOWS_DOWN))
 			shot.m_areaAffected *= pow(0.96, CTimer::GetTimeStep()); // FRAMERATE
 
-		if (weaponInfo->m_bExpands)
+		if (weaponInfo->IsFlagSet(WEAPONFLAG_EXPANDS))
 			shot.m_radius += 0.075f * CTimer::GetTimeStep();
 
 		shot.m_startPos += CTimer::GetTimeStep() * shot.m_areaAffected;

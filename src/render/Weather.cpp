@@ -69,7 +69,7 @@ const int16 WeatherTypesList[] = {
 	WEATHER_SUNNY, WEATHER_SUNNY, WEATHER_RAINY, WEATHER_CLOUDY,
 };
 
-const float Windiness[] = {
+const float Windyness[] = {
 	0.0f, // WEATHER_SUNNY
 	0.7f, // WEATHER_CLOUDY
 	1.0f, // WEATHER_RAINY
@@ -114,7 +114,7 @@ void CWeather::Init(void)
 	ForcedWeatherType = WEATHER_RANDOM;
 	SoundHandle = DMAudio.CreateEntity(AUDIOTYPE_WEATHER, (void*)1);
 	if (SoundHandle >= 0)
-		DMAudio.SetEntityStatus(SoundHandle, 1);
+		DMAudio.SetEntityStatus(SoundHandle, true);
 }
 
 void CWeather::Update(void)
@@ -202,6 +202,7 @@ void CWeather::Update(void)
 	}
 
 	// Rain
+#ifndef VC_RAIN_NERF
 	float fNewRain;
 	if (NewWeatherType == WEATHER_RAINY) {
 		// if raining for >1 hour, values: 0, 0.33, 0.66, 0.99, switching every ~16.5s
@@ -223,6 +224,25 @@ void CWeather::Update(void)
 		else
 			Rain = Max(fNewRain, Rain - RAIN_CHANGE_SPEED * CTimer::GetTimeStep());
 	}
+#else
+	float fNewRain;
+	if (NewWeatherType == WEATHER_RAINY) {
+		// if raining for >1 hour, values: 0, 0.33, switching every ~16.5s
+		fNewRain = (((uint16)CTimer::GetTimeInMilliseconds() >> 14) & 1) * 0.33f;
+		if (OldWeatherType != WEATHER_RAINY) {
+			if (InterpolationValue < 0.4f)
+				// if rain has just started (<24 minutes), always 0.5
+				fNewRain = 0.5f;
+			else
+				// if rain is ongoing for >24 minutes, values: 0.25, 0.5, switching every ~16.5s
+				fNewRain = 0.25f + (((uint16)CTimer::GetTimeInMilliseconds() >> 14) & 1) * 0.25f;
+		}
+		fNewRain = Max(fNewRain, 0.5f);
+	}
+	else
+		fNewRain = 0.0f;
+	Rain = fNewRain;
+#endif
 
 	// Clouds
 	if (OldWeatherType != WEATHER_SUNNY)
@@ -243,7 +263,7 @@ void CWeather::Update(void)
 		Rainbow = 1.0f - 4.0f * Abs(InterpolationValue - 0.25f) / 4.0f;
 	else
 		Rainbow = 0.0f;
-	Wind = InterpolationValue * Windiness[NewWeatherType] + (1.0f - InterpolationValue) * Windiness[OldWeatherType];
+	Wind = InterpolationValue * Windyness[NewWeatherType] + (1.0f - InterpolationValue) * Windyness[OldWeatherType];
 	AddRain();
 }
 
@@ -278,8 +298,8 @@ void CWeather::AddRain()
 	if (Rain <= 0.1f)
 		return;
 	static RwRGBA colour;
-	float screen_width = RsGlobal.width;
-	float screen_height = RsGlobal.height;
+	float screen_width = SCREEN_WIDTH;
+	float screen_height = SCREEN_HEIGHT;
 	int cur_frame = (int)(3 * Rain) & 3;
 	int num_drops = (int)(2 * Rain) + 2;
 	static int STATIC_RAIN_ANGLE = -45;
@@ -346,7 +366,7 @@ void CWeather::AddRain()
 		pos.y = CGeneral::GetRandomNumberInRange(DROPLETS_TOP_OFFSET, screen_height - DROPLETS_TOP_OFFSET);
 		pos.z = 0.0f;
 		CParticle::AddParticle(PARTICLE_RAINDROP_2D, pos, CVector(0.0f, 0.0f, 0.0f), nil, CGeneral::GetRandomNumberInRange(0.5f, 0.9f),
-			colour, CGeneral::GetRandomNumberInRange(-10, 10), 360 - rain_angle + CGeneral::GetRandomNumberInRange(-30, 30), cur_frame, 0);
+			colour, CGeneral::GetRandomNumberInRange(-10, 10), 360 - rain_angle + CGeneral::GetRandomNumberInRange(-30, 30), cur_frame, 50);
 	}
 	int num_splash_attempts = (int)(3 * Rain) + 1;
 	int num_splashes = (int)(3 * Rain) + 4;
@@ -359,7 +379,7 @@ void CWeather::AddRain()
 		RwCameraGetFarClipPlane(TheCamera.m_pRwCamera) / (RwCameraGetFarClipPlane(TheCamera.m_pRwCamera) * *(CVector2D*)RwCameraGetViewWindow(TheCamera.m_pRwCamera)).Magnitude();
 	splash_points[3] = 4.0f * CVector(RwCameraGetViewWindow(TheCamera.m_pRwCamera)->x, RwCameraGetViewWindow(TheCamera.m_pRwCamera)->y, 1.0f) *
 		RwCameraGetFarClipPlane(TheCamera.m_pRwCamera) / (RwCameraGetFarClipPlane(TheCamera.m_pRwCamera) * *(CVector2D*)RwCameraGetViewWindow(TheCamera.m_pRwCamera)).Magnitude();
-	RwV3dTransformPoints((RwV3d*)splash_points, (RwV3d*)splash_points, 4, RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera)));
+	RwV3dTransformPoints(splash_points, splash_points, 4, RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera)));
 	CVector fp = (splash_points[0] + splash_points[1] + splash_points[2] + splash_points[3]) / 4;
 	for (int i = 0; i < num_splash_attempts; i++) {
 		CColPoint point;
@@ -397,11 +417,11 @@ void RenderOneRainStreak(CVector pos, CVector unused, int intensity, bool scale,
 	RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + 0], 0, 0, 0, 0);
 	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 0], pos.x + 11.0f * TheCamera.GetUp().x, pos.y + 11.0f * TheCamera.GetUp().y, pos.z + 11.0f * TheCamera.GetUp().z);
 	RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + 1], 0, 0, 0, 0);
-	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 1], pos.x - 9.0f * TheCamera.GetRight().x, pos.y - 9.0f * TheCamera.GetRight().y, pos.z - 9.0f * TheCamera.GetUp().z);
+	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 1], pos.x - 9.0f * TheCamera.GetRight().x, pos.y - 9.0f * TheCamera.GetRight().y, pos.z - 9.0f * TheCamera.GetRight().z);
 	RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + 2], RAIN_COLOUR_R * intensity / 256, RAIN_COLOUR_G * intensity / 256, RAIN_COLOUR_B * intensity / 256, RAIN_ALPHA);
 	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 2], pos.x, pos.y, pos.z);
 	RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + 3], 0, 0, 0, 0);
-	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 3], pos.x + 9.0f * TheCamera.GetRight().x, pos.y + 9.0f * TheCamera.GetRight().y, pos.z + 9.0f * TheCamera.GetUp().z);
+	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 3], pos.x + 9.0f * TheCamera.GetRight().x, pos.y + 9.0f * TheCamera.GetRight().y, pos.z + 9.0f * TheCamera.GetRight().z);
 	RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + 4], 0, 0, 0, 0); 
 	RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + 4], pos.x - 11.0f * TheCamera.GetUp().x, pos.y - 11.0f * TheCamera.GetUp().y, pos.z - 11.0f * TheCamera.GetUp().z);
 	float u = STREAK_U;

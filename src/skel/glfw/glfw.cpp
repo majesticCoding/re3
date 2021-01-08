@@ -1,5 +1,15 @@
 #if defined RW_GL3 && !defined LIBRW_SDL2
 
+#ifdef _WIN32
+#include <windows.h>
+#include <mmsystem.h>
+#include <shellapi.h>
+#include <windowsx.h>
+#include <basetsd.h>
+#include <regstr.h>
+#include <shlobj.h>
+#endif
+
 #define WITHWINDOWS
 #include "common.h"
 
@@ -16,7 +26,6 @@
 #include "platform.h"
 #include "crossplatform.h"
 
-#include "patcher.h"
 #include "main.h"
 #include "FileMgr.h"
 #include "Text.h"
@@ -27,9 +36,11 @@
 #include "Frontend.h"
 #include "Game.h"
 #include "PCSave.h"
+#include "MemoryCard.h"
 #include "Sprite2d.h"
 #include "AnimViewer.h"
-
+#include "Font.h"
+#include "MemoryMgr.h"
 
 #define MAX_SUBSYSTEMS		(16)
 
@@ -59,14 +70,7 @@ static psGlobalType PsGlobal;
 
 #define PSGLOBAL(var) (((psGlobalType *)(RsGlobal.ps))->var)
 
-#undef MAKEPOINTS
-#define MAKEPOINTS(l)		(*((POINTS /*FAR*/ *)&(l)))
-
-#define SAFE_RELEASE(x) { if (x) x->Release(); x = NULL; }
-#define JIF(x) if (FAILED(hr=(x))) \
-	{debug(TEXT("FAILED(hr=0x%x) in ") TEXT(#x) TEXT("\n"), hr); return;}
-
-unsigned long _dwMemAvailPhys;
+size_t _dwMemAvailPhys;
 RwUInt32 gGameState;
 
 #ifdef _WIN32
@@ -74,12 +78,22 @@ DWORD _dwOperatingSystemVersion;
 #include "resource.h"
 #else
 long _dwOperatingSystemVersion;
+#ifndef __APPLE__
 #include <sys/sysinfo.h>
+#else
+#include <mach/mach_host.h>
+#include <sys/sysctl.h>
+#endif
 #include <stddef.h>
 #include <locale.h>
 #include <signal.h>
 #include <errno.h>
 #endif
+
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+char gSelectedJoystickName[128] = "";
+#endif
+
 /*
  *****************************************************************************
  */
@@ -184,6 +198,22 @@ psCameraShowRaster(RwCamera *camera)
 	return;
 }
 
+/*
+ *****************************************************************************
+ */
+RwImage *
+psGrabScreen(RwCamera *pCamera)
+{
+#ifndef LIBRW
+	RwRaster *pRaster = RwCameraGetRaster(pCamera);
+	if (RwImage *pImage = RwImageCreate(pRaster->width, pRaster->height, 32)) {
+		RwImageAllocatePixels(pImage);
+		RwImageSetFromRaster(pImage, pRaster);
+		return pImage;
+	}
+#endif
+	return nil;
+}
 
 /*
  *****************************************************************************
@@ -212,7 +242,13 @@ double
 psTimer(void)
 {
 	struct timespec start; 
+#if defined(CLOCK_MONOTONIC_RAW)
 	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+#elif defined(CLOCK_MONOTONIC_FAST)
+	clock_gettime(CLOCK_MONOTONIC_FAST, &start);
+#else
+	clock_gettime(CLOCK_MONOTONIC, &start);
+#endif
 	return start.tv_sec * 1000.0 + start.tv_nsec/1000000.0;
 }
 #endif       
@@ -239,7 +275,11 @@ psMouseSetPos(RwV2d *pos)
 RwMemoryFunctions*
 psGetMemoryFunctions(void)
 {
+#ifdef USE_CUSTOM_ALLOCATOR
+	return &memFuncs;
+#else
 	return nil;
+#endif
 }
 
 /*
@@ -281,17 +321,76 @@ psInitialize(void)
 	RsGlobal.ps = &PsGlobal;
 	
 	PsGlobal.fullScreen = FALSE;
+	PsGlobal.cursorIsInWindow = TRUE;
 	
 	PsGlobal.joy1id	= -1;
 	PsGlobal.joy2id	= -1;
 
 	CFileMgr::Initialise();
 	
+#ifdef PS2_MENU
+	CPad::Initialise();
+	CPad::GetPad(0)->Mode = 0;
+
+	CGame::frenchGame = false;
+	CGame::germanGame = false;
+	CGame::nastyGame = true;
+	CMenuManager::m_PrefsAllowNastyGame = true;
+
+#ifndef _WIN32
+	// Mandatory for Linux(Unix? Posix?) to set lang. to environment lang.
+	setlocale(LC_ALL, "");	
+
+	char *systemLang, *keyboardLang;
+
+	systemLang = setlocale (LC_ALL, NULL);
+	keyboardLang = setlocale (LC_CTYPE, NULL);
+	
+	short lang;
+	lang = !strncmp(systemLang, "fr_",3) ? LANG_FRENCH :
+					!strncmp(systemLang, "de_",3) ? LANG_GERMAN :
+					!strncmp(systemLang, "en_",3) ? LANG_ENGLISH :
+					!strncmp(systemLang, "it_",3) ? LANG_ITALIAN :
+					!strncmp(systemLang, "es_",3) ? LANG_SPANISH :
+					LANG_OTHER;
+#else
+	WORD lang	= PRIMARYLANGID(GetSystemDefaultLCID());
+#endif
+
+	if ( lang  == LANG_ITALIAN )
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
+	else if ( lang  == LANG_SPANISH )
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
+	else if ( lang  == LANG_GERMAN )
+	{
+		CGame::germanGame = true;
+		CGame::nastyGame = false;
+		CMenuManager::m_PrefsAllowNastyGame = false;
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
+	}
+	else if ( lang  == LANG_FRENCH )
+	{
+		CGame::frenchGame = true;
+		CGame::nastyGame = false;
+		CMenuManager::m_PrefsAllowNastyGame = false;
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
+	}
+	else
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
+
+	FrontEndMenuManager.InitialiseMenuContentsAfterLoadingGame();
+
+	TheMemoryCard.Init();
+#else
 	C_PcSave::SetSaveDirectory(_psGetUserFilesFolder());
 	
 	InitialiseLanguage();
 
+#if GTA_VERSION < GTA3_PC_11
 	FrontEndMenuManager.LoadSettings();
+#endif
+
+#endif
 	
 	gGameState = GS_START_UP;
 	TRACE("gGameState = GS_START_UP");
@@ -323,7 +422,7 @@ psInitialize(void)
 	}
 	else if ( verInfo.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS )
 	{
-		if ( verInfo.dwMajorVersion > 4 || verInfo.dwMajorVersion == 4 && verInfo.dwMinorVersion == 1 )
+		if ( verInfo.dwMajorVersion > 4 || verInfo.dwMajorVersion == 4 && verInfo.dwMinorVersion != 0 )
 		{
 			debug("Operating System is Win98\n");
 			_dwOperatingSystemVersion = OS_WIN98;
@@ -334,7 +433,21 @@ psInitialize(void)
 			_dwOperatingSystemVersion = OS_WIN95;
 		}
 	}
+#else
+	_dwOperatingSystemVersion = OS_WINXP; // To fool other classes
+#endif
 
+	
+#ifndef PS2_MENU
+
+#if GTA_VERSION >= GTA3_PC_11
+	FrontEndMenuManager.LoadSettings();
+#endif
+
+#endif
+
+
+#ifdef _WIN32
 	MEMORYSTATUS memstats;
 	GlobalMemoryStatus(&memstats);
 
@@ -342,18 +455,28 @@ psInitialize(void)
 
 	debug("Physical memory size %u\n", memstats.dwTotalPhys);
 	debug("Available physical memory %u\n", memstats.dwAvailPhys);
+#elif defined (__APPLE__)
+	uint64_t size = 0;
+	uint64_t page_size = 0;
+	size_t uint64_len = sizeof(uint64_t);
+	size_t ull_len = sizeof(unsigned long long);
+	sysctl((int[]){CTL_HW, HW_PAGESIZE}, 2, &page_size, &ull_len, NULL, 0);
+	sysctl((int[]){CTL_HW, HW_MEMSIZE}, 2, &size, &uint64_len, NULL, 0);
+	vm_statistics_data_t vm_stat;
+	mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+	host_statistics(mach_host_self(), HOST_VM_INFO, (host_info_t)&vm_stat, &count);
+	_dwMemAvailPhys = (uint64_t)(vm_stat.free_count * page_size);
+	debug("Physical memory size %llu\n", _dwMemAvailPhys);
+	debug("Available physical memory %llu\n", size);
 #else
-	struct sysinfo systemInfo;
+ 	struct sysinfo systemInfo;
 	sysinfo(&systemInfo);
-	
 	_dwMemAvailPhys = systemInfo.freeram;
-	_dwOperatingSystemVersion = OS_WINXP; // To fool other classes
-
 	debug("Physical memory size %u\n", systemInfo.totalram);
 	debug("Available physical memory %u\n", systemInfo.freeram);
-
 #endif
-	TheText.Unload();
+  
+  TheText.Unload();
 
 	return TRUE;
 }
@@ -664,7 +787,9 @@ psSelectDevice()
 	FrontEndMenuManager.m_nPrefsDepth = vm.depth;
 #endif
 
+#ifndef PS2_MENU
 	FrontEndMenuManager.m_nCurrOption = 0;
+#endif
 	
 	/* Set up the video mode and set the apps window
 	* dimensions to match */
@@ -705,7 +830,10 @@ psSelectDevice()
 		
 		PSGLOBAL(fullScreen) = !FrontEndMenuManager.m_nPrefsWindowed;
 #endif
-	
+
+#ifdef MULTISAMPLING
+	RwD3D8EngineSetMultiSamplingLevels(1 << FrontEndMenuManager.m_nPrefsMSAALevel);
+#endif
 	return TRUE;
 }
 
@@ -713,23 +841,62 @@ void keypressCB(GLFWwindow* window, int key, int scancode, int action, int mods)
 void resizeCB(GLFWwindow* window, int width, int height);
 void scrollCB(GLFWwindow* window, double xoffset, double yoffset);
 void cursorCB(GLFWwindow* window, double xpos, double ypos);
+void cursorEnterCB(GLFWwindow* window, int entered);
 void joysChangeCB(int jid, int event);
 
 bool IsThisJoystickBlacklisted(int i)
 {
-	const char *joyname = glfwGetJoystickName(i);
-
-	// this is just a keyboard and mouse
-	// Microsoft Microsoft® 2.4GHz Transceiver v8.0 Consumer Control
-	// Microsoft Microsoft® 2.4GHz Transceiver v8.0 System Control
-	if(strstr(joyname, "2.4GHz Transceiver"))
-		return true;
-
+#ifndef DONT_TRUST_RECOGNIZED_JOYSTICKS
 	return false;
+#else
+	if (glfwJoystickIsGamepad(i))
+		return false;
+
+	const char* joyname = glfwGetJoystickName(i);
+
+	if (gSelectedJoystickName[0] != '\0' &&
+		strncmp(joyname, gSelectedJoystickName, strlen(gSelectedJoystickName)) == 0)
+		return false;
+
+	return true;
+#endif
 }
 
 void _InputInitialiseJoys()
 {
+	PSGLOBAL(joy1id) = -1;
+	PSGLOBAL(joy2id) = -1;
+
+	// Load our gamepad mappings.
+#define SDL_GAMEPAD_DB_PATH "gamecontrollerdb.txt"
+	FILE *f = fopen(SDL_GAMEPAD_DB_PATH, "rb");
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		size_t fsize = ftell(f);
+		fseek(f, 0, SEEK_SET);
+
+		char *db = (char*)malloc(fsize + 1);
+		if (fread(db, 1, fsize, f) == fsize) {
+			db[fsize] = '\0';
+
+			if (glfwUpdateGamepadMappings(db) == GLFW_FALSE)
+				Error("glfwUpdateGamepadMappings didn't succeed, check " SDL_GAMEPAD_DB_PATH ".\n");
+		} else
+			Error("fread on " SDL_GAMEPAD_DB_PATH " wasn't successful.\n");
+
+		free(db);
+		fclose(f);
+	} else
+		printf("You don't seem to have copied " SDL_GAMEPAD_DB_PATH " file from re3/gamefiles to GTA3 directory. Some gamepads may not be recognized.\n");
+
+#undef SDL_GAMEPAD_DB_PATH
+
+	// But always overwrite it with the one in SDL_GAMECONTROLLERCONFIG.
+	char const* EnvControlConfig = getenv("SDL_GAMECONTROLLERCONFIG");
+	if (EnvControlConfig != nil) {
+		glfwUpdateGamepadMappings(EnvControlConfig);
+	}
+
 	for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++) {
 		if (glfwJoystickPresent(i) && !IsThisJoystickBlacklisted(i)) {
 			if (PSGLOBAL(joy1id) == -1)
@@ -744,13 +911,17 @@ void _InputInitialiseJoys()
 	if (PSGLOBAL(joy1id) != -1) {
 		int count;
 		glfwGetJoystickButtons(PSGLOBAL(joy1id), &count);
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+		strcpy(gSelectedJoystickName, glfwGetJoystickName(PSGLOBAL(joy1id)));
+#endif
 		ControlsManager.InitDefaultControlConfigJoyPad(count);
 	}
 }
 
-void _InputInitialiseMouse()
+long _InputInitialiseMouse()
 {
 	glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	return 0;
 }
 
 void psPostRWinit(void)
@@ -759,9 +930,10 @@ void psPostRWinit(void)
 	RwEngineGetVideoModeInfo(&vm, GcurSelVM);
 
 	glfwSetKeyCallback(PSGLOBAL(window), keypressCB);
-	glfwSetWindowSizeCallback(PSGLOBAL(window), resizeCB);
+	glfwSetFramebufferSizeCallback(PSGLOBAL(window), resizeCB);
 	glfwSetScrollCallback(PSGLOBAL(window), scrollCB);
 	glfwSetCursorPosCallback(PSGLOBAL(window), cursorCB);
+	glfwSetCursorEnterCallback(PSGLOBAL(window), cursorEnterCB);
 	glfwSetJoystickCallback(joysChangeCB);
 
 	_InputInitialiseJoys();
@@ -1005,33 +1177,30 @@ void InitialiseLanguage()
 	{
 		case LANG_GERMAN:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_GERMAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
 			break;
 		}
 		case LANG_SPANISH:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_SPANISH;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
 			break;
 		}
 		case LANG_FRENCH:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_FRENCH;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
 			break;
 		}
 		case LANG_ITALIAN:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_ITALIAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
 			break;
 		}
 		default:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_AMERICAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
 			break;
 		}
 	}
-
-	TheText.Unload();
-	TheText.Load();
 
 #ifndef _WIN32
 	// TODO this is needed for strcasecmp to work correctly across all languages, but can these cause other problems??
@@ -1039,6 +1208,9 @@ void InitialiseLanguage()
 	setlocale(LC_COLLATE, "C");
 	setlocale(LC_NUMERIC, "C");
 #endif
+
+	TheText.Unload();
+	TheText.Load();
 }
 
 /*
@@ -1073,7 +1245,9 @@ void terminateHandler(int sig, siginfo_t *info, void *ucontext) {
 }
 
 void dummyHandler(int sig){
+	// Don't kill the app pls
 }
+
 #endif
 
 void resizeCB(GLFWwindow* window, int width, int height) {
@@ -1083,9 +1257,10 @@ void resizeCB(GLFWwindow* window, int width, int height) {
 	* memory things don't work.
 	*/
 	/* redraw window */
-	if (RwInitialised && (gGameState == GS_PLAYING_GAME || gGameState == GS_ANIMVIEWER))
+
+	if (RwInitialised && gGameState == GS_PLAYING_GAME)
 	{
-		RsEventHandler((gGameState == GS_PLAYING_GAME ? rsIDLE : rsANIMVIEWER), (void*)TRUE);
+		RsEventHandler(rsIDLE, (void *)TRUE);
 	}
 
 	if (RwInitialised && height > 0 && width > 0) {
@@ -1267,11 +1442,21 @@ _InputTranslateShiftKeyUpDown(RsKeyCodes *rs) {
 	RsKeyboardEventHandler(rshiftStatus ? rsKEYDOWN : rsKEYUP, &(*rs = rsRSHIFT));
 }
 
-// TODO this only works in frontend(and luckily only frontend use this), maybe because of glfw knows that mouse pos is > 32000 in game??
+// TODO this only works in frontend(and luckily only frontend use this). Fun fact: if I get pos manually in game, glfw reports that it's > 32000
 void
 cursorCB(GLFWwindow* window, double xpos, double ypos) {
-	FrontEndMenuManager.m_nMouseTempPosX = xpos;
-	FrontEndMenuManager.m_nMouseTempPosY = ypos;
+	if (!FrontEndMenuManager.m_bMenuActive)
+		return;
+	
+	int winw, winh;
+	glfwGetWindowSize(PSGLOBAL(window), &winw, &winh);
+	FrontEndMenuManager.m_nMouseTempPosX = xpos * (RsGlobal.maximumWidth / winw);
+	FrontEndMenuManager.m_nMouseTempPosY = ypos * (RsGlobal.maximumHeight / winh);
+}
+
+void
+cursorEnterCB(GLFWwindow* window, int entered) {
+	PSGLOBAL(cursorIsInWindow) = !!entered;
 }
 
 /*
@@ -1288,6 +1473,17 @@ WinMain(HINSTANCE instance,
 	RwInt32 argc;
 	RwChar** argv;
 	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, nil, SPIF_SENDCHANGE);
+
+#ifndef MASTER
+	if (strstr(cmdLine, "-console"))
+	{
+		AllocConsole();
+		freopen("CONIN$", "r", stdin);
+		freopen("CONOUT$", "w", stdout);
+		freopen("CONOUT$", "w", stderr);
+	}
+#endif
+
 #else
 int
 main(int argc, char *argv[])
@@ -1295,7 +1491,10 @@ main(int argc, char *argv[])
 #endif
 	RwV2d pos;
 	RwInt32 i;
-//	StaticPatcher::Apply();
+
+#ifdef USE_CUSTOM_ALLOCATOR
+	InitMemoryMgr();
+#endif
 
 #ifndef _WIN32
 	struct sigaction act;
@@ -1303,9 +1502,10 @@ main(int argc, char *argv[])
 	act.sa_flags = SA_SIGINFO;
 	sigaction(SIGTERM, &act, NULL);
 	struct sigaction sa;
+	sigemptyset(&sa.sa_mask);
 	sa.sa_handler = dummyHandler;
 	sa.sa_flags = 0;
-	sigaction(SIGINT, &sa, NULL); // Needed for CdStreamPosix
+	sigaction(SIGUSR1, &sa, NULL); // Needed for CdStreamPosix
 #endif
 
 	/* 
@@ -1425,12 +1625,19 @@ main(int argc, char *argv[])
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 #endif
 
-#ifndef MASTER
-	if (TurnOnAnimViewer) {
-		CAnimViewer::Initialise();
-		FrontEndMenuManager.m_bGameNotLoaded = false;
-		gGameState = GS_ANIMVIEWER;
-		TurnOnAnimViewer = false;
+#ifdef PS2_MENU
+	int32 r = TheMemoryCard.CheckCardStateAtGameStartUp(CARD_ONE);
+	if (   r == CMemoryCard::ERR_DIRNOENTRY  || r == CMemoryCard::ERR_NOFORMAT
+		&& r != CMemoryCard::ERR_OPENNOENTRY && r != CMemoryCard::ERR_NONE )
+	{
+		LoadingScreen(nil, nil, "loadsc0");
+		
+		TheText.Unload();
+		TheText.Load();
+		
+		CFont::Initialise();
+		
+		FrontEndMenuManager.DrawMemoryCardStartUpMenus();
 	}
 #endif
 	
@@ -1452,34 +1659,147 @@ main(int argc, char *argv[])
 		* Enter the message processing loop...
 		*/
 
+#ifndef MASTER
+		if (gbModelViewer) {
+			// This is TheModelViewer in LCS, but not compiled on III Mobile.
+			LoadingScreen("Loading the ModelViewer", NULL, GetRandomSplashScreen());
+			CAnimViewer::Initialise();
+			CTimer::Update();
+#ifndef PS2_MENU
+			FrontEndMenuManager.m_bGameNotLoaded = false;
+#endif
+		}
+#endif
+
+#ifdef PS2_MENU
+		if (TheMemoryCard.m_bWantToLoad)
+			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
+		
+		TheMemoryCard.m_bWantToLoad = false;
+		
+		CTimer::Update();
+		
+		while( !RsGlobal.quit && !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad) && !glfwWindowShouldClose(PSGLOBAL(window)) )
+#else
 		while( !RsGlobal.quit && !FrontEndMenuManager.m_bWantToRestart && !glfwWindowShouldClose(PSGLOBAL(window)))
+#endif
 		{
 			glfwPollEvents();
-			if( ForegroundApp )
+#ifndef MASTER
+			if (gbModelViewer) {
+				// This is TheModelViewerCore in LCS, but TheModelViewer on other state-machine III-VCs.
+				TheModelViewer();
+			} else
+#endif
+			if ( ForegroundApp )
 			{
 				switch ( gGameState )
 				{
 					case GS_START_UP:
 					{
+#ifdef NO_MOVIES
 						gGameState = GS_INIT_ONCE;
+#else
+						gGameState = GS_INIT_LOGO_MPEG;
+#endif
 						TRACE("gGameState = GS_INIT_ONCE");
 						break;
 					}
+
+				    case GS_INIT_LOGO_MPEG:
+					{
+					    //if (!startupDeactivate)
+						//    PlayMovieInWindow(cmdShow, "movies\\Logo.mpg");
+					    gGameState = GS_LOGO_MPEG;
+					    TRACE("gGameState = GS_LOGO_MPEG;");
+					    break;
+				    }
+
+				    case GS_LOGO_MPEG:
+					{
+//					    CPad::UpdatePads();
+
+//					    if (startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0)
+						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetEnterJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetCharJustDown(' '))
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetAltJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetTabJustDown())
+//						    ++gGameState;
+
+					    break;
+				    }
+
+				    case GS_INIT_INTRO_MPEG:
+					{
+//#ifndef NO_MOVIES
+//					    CloseClip();
+//					    CoUninitialize();
+//#endif
+//
+//					    if (CMenuManager::OS_Language == LANG_FRENCH || CMenuManager::OS_Language == LANG_GERMAN)
+//						    PlayMovieInWindow(cmdShow, "movies\\GTAtitlesGER.mpg");
+//					    else
+//						    PlayMovieInWindow(cmdShow, "movies\\GTAtitles.mpg");
+
+					    gGameState = GS_INTRO_MPEG;
+					    TRACE("gGameState = GS_INTRO_MPEG;");
+					    break;
+				    }
+
+				    case GS_INTRO_MPEG:
+					{
+//					    CPad::UpdatePads();
+//
+//					    if (startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0)
+						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetLeftMouseJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetEnterJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetCharJustDown(' '))
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetAltJustDown())
+//						    ++gGameState;
+//					    else if (CPad::GetPad(0)->GetTabJustDown())
+//						    ++gGameState;
+
+					    break;
+				    }
 
 					case GS_INIT_ONCE:
 					{
 						//CoUninitialize();
 						
-						LoadingScreen(nil, nil, "loadsc0");
+#ifdef PS2_MENU
+						extern char version_name[64];
+						if ( CGame::frenchGame || CGame::germanGame )
+							LoadingScreen(NULL, version_name, "loadsc24");
+						else
+							LoadingScreen(NULL, version_name, "loadsc0");
 						
+						printf("Into TheGame!!!\n");
+#else				
+						LoadingScreen(nil, nil, "loadsc0");
+#endif
 						if ( !CGame::InitialiseOnceAfterRW() )
 							RsGlobal.quit = TRUE;
 						
+#ifdef PS2_MENU
+						gGameState = GS_INIT_PLAYING_GAME;
+#else
 						gGameState = GS_INIT_FRONTEND;
 						TRACE("gGameState = GS_INIT_FRONTEND;");
+#endif
 						break;
 					}
 					
+#ifndef PS2_MENU
 					case GS_INIT_FRONTEND:
 					{
 						LoadingScreen(nil, nil, "loadsc0");
@@ -1505,13 +1825,21 @@ main(int argc, char *argv[])
 						if(!glfwGetWindowAttrib(PSGLOBAL(window), GLFW_ICONIFIED))
 							RsEventHandler(rsFRONTENDIDLE, nil);
 
+#ifdef PS2_MENU
+						if ( !FrontEndMenuManager.m_bMenuActive || TheMemoryCard.m_bWantToLoad )
+#else
 						if ( !FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bWantToLoad )
+#endif
 						{
 							gGameState = GS_INIT_PLAYING_GAME;
 							TRACE("gGameState = GS_INIT_PLAYING_GAME;");
 						}
 
+#ifdef PS2_MENU
+						if (TheMemoryCard.m_bWantToLoad )
+#else
 						if ( FrontEndMenuManager.m_bWantToLoad )
+#endif
 						{
 							InitialiseGame();
 							FrontEndMenuManager.m_bGameNotLoaded = false;
@@ -1520,11 +1848,37 @@ main(int argc, char *argv[])
 						}
 						break;
 					}
+#endif
 					
 					case GS_INIT_PLAYING_GAME:
 					{
+#ifdef PS2_MENU
+						CGame::Initialise("DATA\\GTA3.DAT");
+						
+						//LoadingScreen("Starting Game", NULL, GetRandomSplashScreen());
+					
+						if (   TheMemoryCard.CheckCardInserted(CARD_ONE) == CMemoryCard::NO_ERR_SUCCESS
+							&& TheMemoryCard.ChangeDirectory(CARD_ONE, TheMemoryCard.Cards[CARD_ONE].dir)
+							&& TheMemoryCard.FindMostRecentFileName(CARD_ONE, TheMemoryCard.MostRecentFile) == true
+							&& TheMemoryCard.CheckDataNotCorrupt(TheMemoryCard.MostRecentFile))
+						{
+							strcpy(TheMemoryCard.LoadFileName, TheMemoryCard.MostRecentFile);
+							TheMemoryCard.b_FoundRecentSavedGameWantToLoad = true;
+					
+							if (CMenuManager::m_PrefsLanguage != TheMemoryCard.GetLanguageToLoad())
+							{
+								CMenuManager::m_PrefsLanguage = TheMemoryCard.GetLanguageToLoad();
+								TheText.Unload();
+								TheText.Load();
+							}
+					
+							CGame::currLevel = (eLevelName)TheMemoryCard.GetLevelToLoad();
+						}
+#else
 						InitialiseGame();
+
 						FrontEndMenuManager.m_bGameNotLoaded = false;
+#endif
 						gGameState = GS_PLAYING_GAME;
 						TRACE("gGameState = GS_PLAYING_GAME;");
 						break;
@@ -1540,18 +1894,6 @@ main(int argc, char *argv[])
 						}
 						break;
 					}
-#ifndef MASTER
-					case GS_ANIMVIEWER:
-					{
-						float ms = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
-						if (RwInitialised)
-						{
-							if (!CMenuManager::m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
-								RsEventHandler(rsANIMVIEWER, (void*)TRUE);
-						}
-						break;
-					}
-#endif
 				}
 			}
 			else
@@ -1573,16 +1915,46 @@ main(int argc, char *argv[])
 		RwInitialised = FALSE;
 		
 		FrontEndMenuManager.UnloadTextures();
+#ifdef PS2_MENU	
+		if ( !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad))
+			break;
+#else
 		if ( !FrontEndMenuManager.m_bWantToRestart )
 			break;
+#endif
 		
 		CPad::ResetCheats();
 		CPad::StopPadsShaking();
 		
 		DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
 		
+#ifdef PS2_MENU
+		CGame::ShutDownForRestart();
+#endif
+		
 		CTimer::Stop();
 		
+#ifdef PS2_MENU
+		if (FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+		{
+			if (TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+			{
+				FrontEndMenuManager.m_bWantToRestart = true;
+				TheMemoryCard.m_bWantToLoad = true;
+			}
+
+			CGame::InitialiseWhenRestarting();
+			DMAudio.ChangeMusicMode(MUSICMODE_GAME);
+			FrontEndMenuManager.m_bWantToRestart = false;
+			
+			continue;
+		}
+		
+		CGame::ShutDown();	
+		CTimer::Stop();
+		
+		break;
+#else
 		if ( FrontEndMenuManager.m_bWantToLoad )
 		{
 			CGame::ShutDownForRestart();
@@ -1593,10 +1965,13 @@ main(int argc, char *argv[])
 		}
 		else
 		{
+#ifndef MASTER
+			if ( gbModelViewer )
+				CAnimViewer::Shutdown();
+			else
+#endif
 			if ( gGameState == GS_PLAYING_GAME )
 				CGame::ShutDown();
-			else if ( gGameState == GS_ANIMVIEWER )
-				CAnimViewer::Shutdown();
 			
 			CTimer::Stop();
 			
@@ -1614,13 +1989,17 @@ main(int argc, char *argv[])
 		
 		FrontEndMenuManager.m_bFirstTime = false;
 		FrontEndMenuManager.m_bWantToRestart = false;
+#endif
 	}
 	
 
+#ifndef MASTER
+	if ( gbModelViewer )
+		CAnimViewer::Shutdown();
+	else
+#endif
 	if ( gGameState == GS_PLAYING_GAME )
 		CGame::ShutDown();
-	else if ( gGameState == GS_ANIMVIEWER )
-		CAnimViewer::Shutdown();
 
 	DMAudio.Terminate();
 	
@@ -1708,11 +2087,11 @@ void CapturePad(RwInt32 padID)
 	
 	// Gamepad axes are guaranteed to return 0.0f if that particular gamepad doesn't have that axis.
 	if ( glfwPad != -1 ) {
-		leftStickPos.x = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[0] : numAxes >= 0 ? axes[0] : 0.0f;
-		leftStickPos.y = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[1] : numAxes >= 1 ? axes[1] : 0.0f;
+		leftStickPos.x = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[0] : numAxes >= 1 ? axes[0] : 0.0f;
+		leftStickPos.y = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[1] : numAxes >= 2 ? axes[1] : 0.0f;
 
-		rightStickPos.x = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[2] : numAxes >= 2 ? axes[2] : 0.0f;
-		rightStickPos.y = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[3] : numAxes >= 3 ? axes[3] : 0.0f;
+		rightStickPos.x = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[2] : numAxes >= 3 ? axes[2] : 0.0f;
+		rightStickPos.y = ControlsManager.m_NewState.isGamepad ? gamepadState.axes[3] : numAxes >= 4 ? axes[3] : 0.0f;
 	}
 	
 	{
@@ -1747,18 +2126,19 @@ void CapturePad(RwInt32 padID)
 
 void joysChangeCB(int jid, int event)
 {
-	if (event == GLFW_CONNECTED && !IsThisJoystickBlacklisted(jid))
-	{
-		if (PSGLOBAL(joy1id) == -1)
+	if (event == GLFW_CONNECTED && !IsThisJoystickBlacklisted(jid)) {
+		if (PSGLOBAL(joy1id) == -1) {
 			PSGLOBAL(joy1id) = jid;
-		else if (PSGLOBAL(joy2id) == -1)
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+			strcpy(gSelectedJoystickName, glfwGetJoystickName(jid));
+#endif
+		} else if (PSGLOBAL(joy2id) == -1)
 			PSGLOBAL(joy2id) = jid;
-	}
-	else if (event == GLFW_DISCONNECTED)
-	{
-		if (PSGLOBAL(joy1id) == jid)
+
+	} else if (event == GLFW_DISCONNECTED) {
+		if (PSGLOBAL(joy1id) == jid) {
 			PSGLOBAL(joy1id) = -1;
-		else if (PSGLOBAL(joy2id) == jid)
+		} else if (PSGLOBAL(joy2id) == jid)
 			PSGLOBAL(joy2id) = -1;
 	}
 }

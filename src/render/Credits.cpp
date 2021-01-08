@@ -39,11 +39,20 @@ CCredits::PrintCreditSpace(float space, uint32 &line)
 void
 CCredits::PrintCreditText(float scaleX, float scaleY, wchar *text, uint32 &lineoffset, float scrolloffset)
 {
+#ifdef FIX_BUGS
+	float start = DEFAULT_SCREEN_HEIGHT + 50.0f;
+#else
 	float start = SCREEN_HEIGHT + 50.0f;
+#endif
 	float y = lineoffset + start - scrolloffset;
 	if(y > -50.0f && y < start){
+#ifdef FIX_BUGS
+		CFont::SetScale(SCREEN_SCALE_X(scaleX), SCREEN_SCALE_Y(scaleY));
+		CFont::PrintString(SCREEN_WIDTH/2.0f, SCREEN_SCALE_Y(y), (uint16*)text);
+#else
 		CFont::SetScale(scaleX, scaleY);
 		CFont::PrintString(SCREEN_WIDTH/2.0f, y, (uint16*)text);
+#endif
 	}
 	lineoffset += scaleY*25.0f;
 }
@@ -62,7 +71,11 @@ CCredits::Render(void)
 	scrolloffset = (CTimer::GetTimeInMilliseconds() - CreditsStartTime) / 24.0f;
 	CFont::SetJustifyOff();
 	CFont::SetBackgroundOff();
+#ifdef FIX_BUGS
+	CFont::SetCentreSize(SCREEN_SCALE_X(DEFAULT_SCREEN_WIDTH - 20));
+#else
 	CFont::SetCentreSize(SCREEN_WIDTH - 20);
+#endif
 	CFont::SetCentreOn();
 	CFont::SetPropOn();
 	CFont::SetColor(CRGBA(220, 220, 220, 220));
@@ -128,13 +141,13 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED040"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED041"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.5, lineoffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED042"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED043"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.5, lineoffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED044"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
@@ -176,32 +189,32 @@ CCredits::Render(void)
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED061"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.5, lineoffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED062"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED063"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED064"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED065"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED066"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED067"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED068"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED069"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.5, lineoffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED070"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED071"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED072"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED073"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED074"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED075"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED076"), lineoffset, scrolloffset);
@@ -220,17 +233,17 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED262"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED085"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.5, lineoffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED086"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED087"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED088"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED089"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED090"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED091"), lineoffset, scrolloffset);
@@ -250,7 +263,7 @@ CCredits::Render(void)
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED100"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED101"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED102"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED103"), lineoffset, scrolloffset);
@@ -261,82 +274,82 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED269"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED107"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED108"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED109"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED110"), lineoffset, scrolloffset);
+	PrintCreditSpace(1.5f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED108"), lineoffset, scrolloffset);
+	PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED109"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED110"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED111"), lineoffset, scrolloffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED112"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED113"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED114"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED115"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED116"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED117"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED118"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED119"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED120"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED121"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED122"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED123"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED124"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED125"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED126"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED127"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED128"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED129"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED130"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED131"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED132"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED133"), lineoffset, scrolloffset);
-	if(CMenuManager::m_PrefsLanguage == LANGUAGE_ITALIAN)
-	        PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED134"), lineoffset, scrolloffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED112"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED113"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED114"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED115"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED116"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED117"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED118"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED119"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED120"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED121"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED122"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED123"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED124"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED125"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED126"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED127"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED128"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED129"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED130"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED131"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED132"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED133"), lineoffset, scrolloffset);
+	if(CMenuManager::m_PrefsLanguage == CMenuManager::LANGUAGE_ITALIAN)
+	        PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED134"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED135"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED136"), lineoffset, scrolloffset);
@@ -349,7 +362,7 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD138A"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD138B"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED139"), lineoffset, scrolloffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED139"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.7f, 1.0f, TheText.Get("CRED140"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD140A"), lineoffset, scrolloffset);
@@ -359,12 +372,12 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD140E"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED141"), lineoffset, scrolloffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED142"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED143"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.0, lineoffset);
-	PrintCreditText(1.0, 1.0, TheText.Get("CRED144"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.0, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED142"), lineoffset, scrolloffset);
+	PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED143"), lineoffset, scrolloffset);
+	PrintCreditSpace(1.0f, lineoffset);
+	PrintCreditText(1.0f, 1.0f, TheText.Get("CRED144"), lineoffset, scrolloffset);
+	PrintCreditSpace(1.0f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED145"), lineoffset, scrolloffset);
 	PrintCreditText(1.4f, 1.4f, TheText.Get("CRED146"), lineoffset, scrolloffset);
@@ -441,19 +454,19 @@ CCredits::Render(void)
 	PrintCreditText(1.4f, 1.4f, TheText.Get("CRED241"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED217"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED218"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD218A"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRD218B"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED219"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED220"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED221"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED222"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED223"), lineoffset, scrolloffset);
@@ -462,7 +475,7 @@ CCredits::Render(void)
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED226"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
 	PrintCreditText(1.4f, 0.82f, TheText.Get("CRED227"), lineoffset, scrolloffset);
-	PrintCreditSpace(1.5, lineoffset);
+	PrintCreditSpace(1.5f, lineoffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED228"), lineoffset, scrolloffset);
 	PrintCreditText(1.7f, 1.7f, TheText.Get("CRED229"), lineoffset, scrolloffset);
 	PrintCreditSpace(2.0f, lineoffset);
@@ -489,8 +502,14 @@ CCredits::Render(void)
 	if(TheCamera.m_WideScreenOn)
 		TheCamera.DrawBordersForWideScreen();
 
+#ifdef FIX_BUGS
+	if(lineoffset + DEFAULT_SCREEN_HEIGHT - scrolloffset < -10.0f)
+#else
 	if(lineoffset + SCREEN_HEIGHT - scrolloffset < -10.0f)
+#endif
+	{
 		bCreditsGoing = false;
+	}
 }
 
 bool CCredits::AreCreditsDone(void)

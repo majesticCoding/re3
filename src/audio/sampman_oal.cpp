@@ -1,4 +1,3 @@
-#include "common.h"
 //#define JUICY_OAL
 
 #ifdef AUDIO_OAL
@@ -8,6 +7,10 @@
 
 #include "eax.h"
 #include "eax-util.h"
+
+#define WITHWINDOWS
+#include "common.h"
+#include "crossplatform.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -27,20 +30,31 @@
 #include "MusicManager.h"
 #include "Frontend.h"
 #include "Timer.h"
+#ifdef AUDIO_OAL_USE_OPUS
+#include <opusfile.h>
+#endif
 
 //TODO: fix eax3 reverb
-//TODO: max channals
+//TODO: max channels
 //TODO: loop count
-//TODO: mp3 player
 
 #ifdef _WIN32
 #pragma comment( lib, "OpenAL32.lib" )
 #endif
 
+// for user MP3s
+#ifdef _WIN32
+#include <direct.h>
+#include <shobjidl.h>
+#include <shlguid.h>
+#else
+#define _getcwd getcwd
+#endif
+
 cSampleManager SampleManager;
 bool _bSampmanInitialised = false;
 
-uint32 BankStartOffset[MAX_SAMPLEBANKS];
+uint32 BankStartOffset[MAX_SFX_BANKS];
 
 int           prevprovider=-1;
 int           curprovider=-1;
@@ -69,62 +83,49 @@ char SampleBankDescFilename[] = "audio/sfx.SDT";
 char SampleBankDataFilename[] = "audio/sfx.RAW";
 
 FILE *fpSampleDescHandle;
+#ifdef OPUS_SFX
+OggOpusFile *fpSampleDataHandle;
+#else
 FILE *fpSampleDataHandle;
-bool  bSampleBankLoaded            [MAX_SAMPLEBANKS];
-int32 nSampleBankDiscStartOffset   [MAX_SAMPLEBANKS];
-int32 nSampleBankSize              [MAX_SAMPLEBANKS];
-uintptr nSampleBankMemoryStartAddress[MAX_SAMPLEBANKS];
+#endif
+bool  bSampleBankLoaded            [MAX_SFX_BANKS];
+int32 nSampleBankDiscStartOffset   [MAX_SFX_BANKS];
+int32 nSampleBankSize              [MAX_SFX_BANKS];
+uintptr nSampleBankMemoryStartAddress[MAX_SFX_BANKS];
 int32 _nSampleDataEndOffset;
 
 int32 nPedSlotSfx    [MAX_PEDSFX];
 int32 nPedSlotSfxAddr[MAX_PEDSFX];
 uint8 nCurrentPedSlot;
 
-ALuint pedBuffers[MAX_PEDSFX];
-
 CChannel aChannel[MAXCHANNELS+MAX2DCHANNELS];
 uint8 nChannelVolume[MAXCHANNELS+MAX2DCHANNELS];
 
 uint32 nStreamLength[TOTAL_STREAMED_SOUNDS];
-ALuint ALStreamSources[MAX_STREAMS];
+ALuint ALStreamSources[MAX_STREAMS][2];
 ALuint ALStreamBuffers[MAX_STREAMS][NUM_STREAMBUFFERS];
-struct
+
+struct tMP3Entry
 {
-	ALuint buffer;
-	ALuint timer;
+	char aFilename[MAX_PATH];
 
-	bool IsEmpty() { return timer == 0; }
-	void Set(ALuint buf) { buffer = buf; }
-	void Wait() { timer  = 10000; }
-	void Init()
-	{
-		buffer = 0;
-		timer  = 0;
-	}
-	void Term()
-	{
-		if ( buffer != 0 && alIsBuffer(buffer) )
-			alDeleteBuffers(1, &buffer);
-		timer = 0;
-	}
-	void Update()
-	{
-		if ( !(timer > 0) ) return;
-		timer -= ALuint(CTimer::GetTimeStepInMilliseconds());
-		if ( timer > 0 ) return;
-		if ( buffer != 0 && alIsBuffer(buffer) )
-		{
-			alDeleteBuffers(1, &buffer);
-			timer = ( alGetError() == AL_NO_ERROR ) ? 0 : 10000;
-		}
-	}
-}ALBuffers[SAMPLEBANK_MAX];
+	uint32 nTrackLength;
+	uint32 nTrackStreamPos;
 
-uint32     nNumMP3s;
+	tMP3Entry* pNext;
+	char* pLinkPath;
+};
+
+uint32 nNumMP3s;
+tMP3Entry* _pMP3List;
+char _mp3DirectoryPath[MAX_PATH]; 
 CStream    *aStream[MAX_STREAMS];
 uint8      nStreamPan   [MAX_STREAMS];
 uint8      nStreamVolume[MAX_STREAMS];
-
+uint8      nStreamLoopedFlag[MAX_STREAMS];
+uint32 _CurMP3Index;
+int32 _CurMP3Pos;
+bool _bIsMp3Active;
 ///////////////////////////////////////////////////////////////
 //	Env		Size	Diffus	Room	RoomHF	RoomLF	DecTm	DcHF	DcLF	Refl	RefDel	Ref Pan				Revb	RevDel		Rev Pan				EchTm	EchDp	ModTm	ModDp	AirAbs	HFRef		LFRef	RRlOff	FLAGS
 EAXLISTENERPROPERTIES StartEAX3 =
@@ -244,16 +245,11 @@ release_existing()
 		if (stream)
 			stream->ProviderTerm();
 		
-		alDeleteSources(1, &ALStreamSources[i]);
 		alDeleteBuffers(NUM_STREAMBUFFERS, ALStreamBuffers[i]);
 	}
+	alDeleteSources(MAX_STREAMS*2, ALStreamSources[0]);
 	
-	alDeleteBuffers(MAX_PEDSFX, pedBuffers);
-	
-	for ( int32 i = 0; i < SAMPLEBANK_MAX; i++ )
-	{
-		ALBuffers[i].Term();
-	}
+	CChannel::DestroyChannels();
 	
 	if ( ALContext )
 	{
@@ -291,7 +287,10 @@ set_new_provider(int index)
 		//TODO:
 		_maxSamples = MAXCHANNELS;
 		
-		ALCint attr[] = {ALC_FREQUENCY,MAX_FREQ,0};
+		ALCint attr[] = {ALC_FREQUENCY,MAX_FREQ,
+						ALC_MONO_SOURCES, MAX_STREAMS * 2 + MAXCHANNELS,
+						0,
+						};
 		
 		ALDevice  = alcOpenDevice(providers[index].id);
 		ASSERT(ALDevice != NULL);
@@ -323,23 +322,22 @@ set_new_provider(int index)
 			alGenAuxiliaryEffectSlots(1, &ALEffectSlot);
 			alGenEffects(1, &ALEffect);
 		}
-		
+
+		alGenSources(MAX_STREAMS*2, ALStreamSources[0]);
 		for ( int32 i = 0; i < MAX_STREAMS; i++ )
 		{
-			alGenSources(1, &ALStreamSources[i]);
-			alGenBuffers(NUM_STREAMBUFFERS, ALStreamBuffers[i]);
+			alGenBuffers(NUM_STREAMBUFFERS, ALStreamBuffers[i]); 
+			alSourcei(ALStreamSources[i][0], AL_SOURCE_RELATIVE, AL_TRUE);
+			alSource3f(ALStreamSources[i][0], AL_POSITION, 0.0f, 0.0f, 0.0f);
+			alSourcef(ALStreamSources[i][0], AL_GAIN, 1.0f);
+			alSourcei(ALStreamSources[i][1], AL_SOURCE_RELATIVE, AL_TRUE);
+			alSource3f(ALStreamSources[i][1], AL_POSITION, 0.0f, 0.0f, 0.0f);
+			alSourcef(ALStreamSources[i][1], AL_GAIN, 1.0f);
 			
 			CStream *stream = aStream[i];
 			if (stream)
 				stream->ProviderInit();
 		}
-		
-		for ( int32 i = 0; i < SAMPLEBANK_MAX; i++ )
-		{
-			ALBuffers[i].Init();
-		}
-		
-		alGenBuffers(MAX_PEDSFX,    pedBuffers);
 		
 		usingEAX = 0;
 		usingEAX3 = 0;
@@ -372,10 +370,12 @@ set_new_provider(int index)
 		}
 		
 		//SampleManager.SetSpeakerConfig(speaker_type);
-				
+		
+		CChannel::InitChannels();
+
 		for ( int32 i = 0; i < MAXCHANNELS; i++ )
-			aChannel[i].Init();
-		aChannel[CHANNEL2D].Init(true);
+			aChannel[i].Init(i);
+		aChannel[CHANNEL2D].Init(CHANNEL2D, true);
 		
 		if ( IsFXSupported() )
 		{
@@ -391,6 +391,12 @@ set_new_provider(int index)
 	}
 	
 	return false;
+}
+
+static bool
+IsThisTrackAt16KHz(uint32 track)
+{
+	return track == STREAMED_SOUND_RADIO_CHAT;
 }
 
 cSampleManager::cSampleManager(void)
@@ -443,20 +449,419 @@ int8 cSampleManager::GetCurrent3DProviderIndex(void)
 
 int8 cSampleManager::SetCurrent3DProvider(uint8 nProvider)
 {
-	ASSERT( nProvider < m_nNumberOfProviders );
 	int savedprovider = curprovider;
-	
-	if ( nProvider < m_nNumberOfProviders )
-	{
-		if ( set_new_provider(nProvider) )
-			return curprovider;
-		else if ( savedprovider != -1 && savedprovider < m_nNumberOfProviders && set_new_provider(savedprovider) )
-			return curprovider;
-		else
-			return -1;
-	}
+
+	nProvider = clamp(nProvider, 0, m_nNumberOfProviders - 1);
+
+	if ( set_new_provider(nProvider) )
+		return curprovider;
+	else if ( savedprovider != -1 && savedprovider < m_nNumberOfProviders && set_new_provider(savedprovider) )
+		return curprovider;
 	else
 		return curprovider;
+}
+
+static bool
+_ResolveLink(char const *path, char *out)
+{
+#ifdef _WIN32
+	size_t len = strlen(path);
+	if (len < 4 || strcmp(&path[len - 4], ".lnk") != 0)
+		return false;
+		
+	IShellLink* psl;
+	WIN32_FIND_DATA fd;
+	char filepath[MAX_PATH];
+	
+	CoInitialize(NULL);
+									   
+	if (SUCCEEDED( CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID*)&psl ) ))
+	{
+		IPersistFile *ppf;
+
+		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (LPVOID*)&ppf)))
+		{
+			WCHAR wpath[MAX_PATH];
+			
+			MultiByteToWideChar(CP_ACP, 0, path, -1, wpath, MAX_PATH);
+			
+			if (SUCCEEDED(ppf->Load(wpath, STGM_READ)))
+			{
+				/* Resolve the link */
+				if (SUCCEEDED(psl->Resolve(NULL, SLR_ANY_MATCH|SLR_NO_UI|SLR_NOSEARCH)))
+				{
+					strcpy(filepath, path);
+					
+					if (SUCCEEDED(psl->GetPath(filepath, MAX_PATH, &fd, SLGP_UNCPRIORITY)))
+					{
+						OutputDebugString(fd.cFileName);
+						
+						strcpy(out, filepath);
+						// FIX: Release the objects. Taken from SA.
+#ifdef FIX_BUGS
+						ppf->Release();
+						psl->Release();
+#endif
+						return true;
+					}
+				}
+			}
+			
+			ppf->Release();
+		}
+		psl->Release();
+	}
+	
+	return false;
+#else
+	struct stat sb;
+
+	if (lstat(path, &sb) == -1) {
+		perror("lstat: ");
+		return false;
+	}
+
+	if (S_ISLNK(sb.st_mode)) {
+		char* linkname = (char*)alloca(sb.st_size + 1);
+		if (linkname == NULL) {
+			fprintf(stderr, "insufficient memory\n");
+			return false;
+		}
+
+		if (readlink(path, linkname, sb.st_size + 1) < 0) {
+			perror("readlink: ");
+			return false;
+		}
+		linkname[sb.st_size] = '\0';
+		strcpy(out, linkname);
+		return true;
+	} else {
+		return false;
+	}
+#endif
+}
+
+static void
+_FindMP3s(void)
+{
+	tMP3Entry *pList;
+	bool bShortcut;	
+	bool bInitFirstEntry;	
+	HANDLE hFind;
+	char path[MAX_PATH];
+	char filepath[MAX_PATH*2];
+	int total_ms;
+	WIN32_FIND_DATA fd;
+	
+	if (getcwd(_mp3DirectoryPath, MAX_PATH) == NULL) {
+		perror("getcwd: ");
+		return;
+	}
+	
+	OutputDebugString("Finding MP3s...");
+	strcpy(path, _mp3DirectoryPath);
+	strcat(path, "\\MP3\\");
+	
+	strcpy(_mp3DirectoryPath, path);
+	OutputDebugString(_mp3DirectoryPath);
+	
+	strcat(path, "*");
+	
+	hFind = FindFirstFile(path, &fd);
+	
+	if ( hFind == INVALID_HANDLE_VALUE ) 
+	{
+		return;
+	}
+	
+	strcpy(filepath, _mp3DirectoryPath);
+	strcat(filepath, fd.cFileName);
+	
+	size_t filepathlen = strlen(filepath);
+	
+	if ( filepathlen <= 0)
+	{
+		FindClose(hFind);
+		return;
+	}
+
+	if ( _ResolveLink(filepath, filepath) )
+	{
+		OutputDebugString("Resolving Link");
+		OutputDebugString(filepath);
+		bShortcut = true;
+	} else
+		bShortcut = false;
+	
+	aStream[0] = new CStream(filepath, ALStreamSources[0], ALStreamBuffers[0]);
+
+	if (aStream[0] && aStream[0]->IsOpened())
+	{
+		total_ms = aStream[0]->GetLengthMS();
+		delete aStream[0];
+		aStream[0] = NULL;
+
+		OutputDebugString(fd.cFileName);
+		
+		_pMP3List = new tMP3Entry;
+		
+		if ( _pMP3List == NULL )
+		{
+			FindClose(hFind);
+			return;
+		}
+		
+		nNumMP3s = 1;
+		
+		strcpy(_pMP3List->aFilename, fd.cFileName);
+		
+		_pMP3List->nTrackLength = total_ms;
+		
+		_pMP3List->pNext = NULL;
+		
+		pList = _pMP3List;
+		
+		if ( bShortcut )
+		{
+			_pMP3List->pLinkPath = new char[MAX_PATH*2];
+			strcpy(_pMP3List->pLinkPath, filepath);
+		}
+		else
+		{
+			_pMP3List->pLinkPath = NULL;
+		}
+
+		bInitFirstEntry = false;
+	}
+	else
+	{
+		strcat(filepath, " - NOT A VALID MP3");
+		
+		OutputDebugString(filepath);
+
+		bInitFirstEntry = true;
+	}
+	
+	while ( true )
+	{
+		if ( !FindNextFile(hFind, &fd) )
+			break;
+		
+		if ( bInitFirstEntry )
+		{
+			strcpy(filepath, _mp3DirectoryPath);
+			strcat(filepath, fd.cFileName);
+			
+			size_t filepathlen = strlen(filepath);
+
+			if ( filepathlen > 0 )
+			{
+				if ( _ResolveLink(filepath, filepath) )
+				{
+					OutputDebugString("Resolving Link");
+					OutputDebugString(filepath);
+					bShortcut = true;
+				} else {
+					bShortcut = false;
+					if (filepathlen > MAX_PATH) {
+						continue;
+					}
+				}
+				aStream[0] = new CStream(filepath, ALStreamSources[0], ALStreamBuffers[0]);
+
+				if (aStream[0] && aStream[0]->IsOpened())
+				{
+					total_ms = aStream[0]->GetLengthMS();
+					delete aStream[0];
+					aStream[0] = NULL;
+					
+					OutputDebugString(fd.cFileName);
+					
+					_pMP3List = new tMP3Entry;
+					
+					if ( _pMP3List  == NULL)
+						break;
+					
+					nNumMP3s = 1;
+					
+					strcpy(_pMP3List->aFilename, fd.cFileName);
+					
+					_pMP3List->nTrackLength = total_ms;
+					_pMP3List->pNext = NULL;
+					
+					if ( bShortcut )
+					{
+						_pMP3List->pLinkPath = new char [MAX_PATH*2];
+						strcpy(_pMP3List->pLinkPath, filepath);
+					}
+					else
+					{
+						_pMP3List->pLinkPath = NULL;
+					}
+					
+					pList = _pMP3List;
+
+					bInitFirstEntry = false;
+				}
+				else
+				{
+					strcat(filepath, " - NOT A VALID MP3");
+					OutputDebugString(filepath);
+				}
+			}
+		}
+		else
+		{
+			strcpy(filepath, _mp3DirectoryPath);
+			strcat(filepath, fd.cFileName);
+			
+			size_t filepathlen = strlen(filepath);
+			
+			if ( filepathlen > 0 )
+			{
+				if ( _ResolveLink(filepath, filepath) )
+				{
+					OutputDebugString("Resolving Link");
+					OutputDebugString(filepath);
+					bShortcut = true;
+				} else
+					bShortcut = false;
+				
+				aStream[0] = new CStream(filepath, ALStreamSources[0], ALStreamBuffers[0]);
+
+				if (aStream[0] && aStream[0]->IsOpened())
+				{
+					total_ms = aStream[0]->GetLengthMS();
+					delete aStream[0];
+					aStream[0] = NULL;
+
+					OutputDebugString(fd.cFileName);
+					
+					pList->pNext = new tMP3Entry;
+					
+					tMP3Entry *e = pList->pNext;
+					
+					if ( e == NULL )
+						break;
+					
+					pList = pList->pNext;
+					
+					strcpy(e->aFilename, fd.cFileName);
+					e->nTrackLength = total_ms;
+					e->pNext = NULL;
+					
+					if ( bShortcut )
+					{
+						e->pLinkPath = new char [MAX_PATH*2];
+						strcpy(e->pLinkPath, filepath);
+					}
+					else
+					{
+						e->pLinkPath = NULL;
+					}
+					
+					nNumMP3s++;
+					
+					OutputDebugString(fd.cFileName);
+				}
+				else
+				{
+					strcat(filepath, " - NOT A VALID MP3");
+					OutputDebugString(filepath);
+				}
+			}
+		}
+	}
+
+	FindClose(hFind);
+}
+
+static void
+_DeleteMP3Entries(void)
+{
+	tMP3Entry *e = _pMP3List;
+
+	while ( e != NULL )
+	{
+		tMP3Entry *next = e->pNext;
+		
+		if ( next == NULL )
+			next = NULL;
+		
+		if ( e->pLinkPath != NULL )
+		{
+#ifndef FIX_BUGS
+			delete   e->pLinkPath; // BUG: should be delete []
+#else
+			delete[] e->pLinkPath;
+#endif
+			e->pLinkPath = NULL;
+		}
+		
+		delete e;
+		
+		if ( next )
+			e = next;
+		else
+			e = NULL;
+		
+		nNumMP3s--;
+	}
+	
+	
+	if ( nNumMP3s != 0 )
+	{
+		OutputDebugString("Not all MP3 entries were deleted");
+		nNumMP3s = 0;
+	}
+	
+	_pMP3List = NULL;
+}
+
+static tMP3Entry *
+_GetMP3EntryByIndex(uint32 idx)
+{
+	uint32 n = ( idx < nNumMP3s ) ? idx : 0;
+	
+	if ( _pMP3List != NULL )
+	{
+		tMP3Entry *e = _pMP3List;
+		
+		for ( uint32 i = 0; i < n; i++ )
+			e = e->pNext;
+		
+		return e;
+			
+	}
+	
+	return NULL;
+}
+
+static inline bool
+_GetMP3PosFromStreamPos(uint32 *pPosition, tMP3Entry **pEntry)
+{
+	_CurMP3Index = 0;
+	
+	for ( *pEntry = _pMP3List; *pEntry != NULL; *pEntry = (*pEntry)->pNext )
+	{
+		if (   *pPosition >= (*pEntry)->nTrackStreamPos
+			&& *pPosition <  (*pEntry)->nTrackLength + (*pEntry)->nTrackStreamPos )
+		{
+			*pPosition -= (*pEntry)->nTrackStreamPos;
+			_CurMP3Pos = *pPosition;
+			
+			return true;
+		}
+		
+		_CurMP3Index++;
+	}
+				
+	*pPosition = 0;
+	*pEntry = _pMP3List;
+	_CurMP3Pos = 0;
+	_CurMP3Index = 0;
+	
+	return false;
 }
 
 bool
@@ -532,7 +937,7 @@ cSampleManager::Initialise(void)
 		fpSampleDescHandle = NULL;
 		fpSampleDataHandle = NULL;
 		
-		for ( int32 i = 0; i < MAX_SAMPLEBANKS; i++ )
+		for ( int32 i = 0; i < MAX_SFX_BANKS; i++ )
 		{
 			bSampleBankLoaded[i]             = false;
 			nSampleBankDiscStartOffset[i]    = 0;
@@ -556,6 +961,70 @@ cSampleManager::Initialise(void)
 			nChannelVolume[i] = 0;
 	}
 	
+	{	
+		for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
+			nStreamLength[i] = 0;
+	}
+	
+		add_providers();
+
+#ifdef AUDIO_CACHE
+	FILE *cacheFile = fcaseopen("audio\\sound.cache", "rb");
+	if (cacheFile) {
+		debug("Loadind audio cache (If game crashes around here, then your cache is corrupted, remove audio/sound.cache)\n");
+		fread(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
+		fclose(cacheFile);
+	} else
+	{
+		debug("Cannot load audio cache\n");
+#endif
+
+		for(int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++) {
+			aStream[0] = new CStream(StreamedNameTable[i], ALStreamSources[0], ALStreamBuffers[0], IsThisTrackAt16KHz(i) ? 16000 : 32000);
+
+			if(aStream[0] && aStream[0]->IsOpened()) {
+				uint32 tatalms = aStream[0]->GetLengthMS();
+				delete aStream[0];
+				aStream[0] = NULL;
+
+				nStreamLength[i] = tatalms;
+			} else
+				USERERROR("Can't open '%s'\n", StreamedNameTable[i]);
+		}
+#ifdef AUDIO_CACHE
+		cacheFile = fcaseopen("audio\\sound.cache", "wb");
+		if(cacheFile) {
+			debug("Saving audio cache\n");
+			fwrite(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
+			fclose(cacheFile);
+		} else {
+			debug("Cannot save audio cache\n");
+		}
+	}
+#endif
+
+	{
+		if ( !InitialiseSampleBanks() )
+		{
+			Terminate();
+			return false;
+		}
+		
+		nSampleBankMemoryStartAddress[SFX_BANK_0] = (uintptr)malloc(nSampleBankSize[SFX_BANK_0]);
+		ASSERT(nSampleBankMemoryStartAddress[SFX_BANK_0] != 0);
+		
+		if ( nSampleBankMemoryStartAddress[SFX_BANK_0] == 0 )
+		{
+			Terminate();
+			return false;
+		}
+		
+		nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = (uintptr)malloc(PED_BLOCKSIZE*MAX_PEDSFX);
+		ASSERT(nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] != 0);
+	
+		LoadSampleBank(SFX_BANK_0);
+	}
+	
 	{
 		for ( int32 i = 0; i < MAX_STREAMS; i++ )
 		{
@@ -563,38 +1032,12 @@ cSampleManager::Initialise(void)
 			nStreamVolume[i] = 100;
 			nStreamPan[i]    = 63;
 		}
-		
-		for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
-			nStreamLength[i] = 0;
 	}
-	
-	{
-		add_providers();
-		
-		if ( !InitialiseSampleBanks() )
-		{
-			Terminate();
-			return false;
-		}
-		
-		nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] = (uintptr)malloc(nSampleBankSize[SAMPLEBANK_MAIN]);
-		ASSERT(nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] != NULL);
-		
-		if ( nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] == NULL )
-		{
-			Terminate();
-			return false;
-		}
-		
-		nSampleBankMemoryStartAddress[SAMPLEBANK_PED] = (uintptr)malloc(PED_BLOCKSIZE*MAX_PEDSFX);
-		ASSERT(nSampleBankMemoryStartAddress[SAMPLEBANK_PED] != NULL);
-	}
-	
 	
 	{
 		_bSampmanInitialised = true;
 		
-		if ( 0 >= defaultProvider && defaultProvider < m_nNumberOfProviders )
+		if ( defaultProvider >= 0 && defaultProvider < m_nNumberOfProviders )
 		{
 			set_new_provider(defaultProvider);
 		}
@@ -604,27 +1047,66 @@ cSampleManager::Initialise(void)
 			return false;
 		}
 	}
-	
+
 	{
-	
-		for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
-		{	
-			aStream[0] = new CStream(StreamedNameTable[i], ALStreamSources[0], ALStreamBuffers[0]);
-			
-			if ( aStream[0] && aStream[0]->IsOpened() )
-			{
-				uint32 tatalms = aStream[0]->GetLengthMS();
-				delete aStream[0];
-				aStream[0] = NULL;
-				
-				nStreamLength[i] = tatalms;
-			}
-			else
-				USERERROR("Can't open '%s'\n", StreamedNameTable[i]);
-		}
-	}
+		nNumMP3s = 0;
 		
-	LoadSampleBank(SAMPLEBANK_MAIN);
+		_pMP3List = NULL;
+		
+		_FindMP3s();
+		
+		if ( nNumMP3s != 0 )
+		{
+			nStreamLength[STREAMED_SOUND_RADIO_MP3_PLAYER] = 0;
+			
+			for ( tMP3Entry *e = _pMP3List; e != NULL; e = e->pNext )
+			{
+				e->nTrackStreamPos = nStreamLength[STREAMED_SOUND_RADIO_MP3_PLAYER];
+				nStreamLength[STREAMED_SOUND_RADIO_MP3_PLAYER] += e->nTrackLength;
+			}
+			
+			time_t t = time(NULL);
+			tm *localtm;
+			bool bUseRandomTable;
+			
+			if ( t == -1 )
+				bUseRandomTable = true;
+			else
+			{
+				bUseRandomTable = false;
+				localtm = localtime(&t);
+			}
+			
+			int32 randval;
+			if ( bUseRandomTable )
+				randval = AudioManager.GetRandomNumber(1);
+			else
+				randval = localtm->tm_sec * localtm->tm_min;
+			
+			_CurMP3Index = randval % nNumMP3s;
+			
+			tMP3Entry *randmp3 = _pMP3List;
+			for ( int32 i = randval % nNumMP3s; i > 0; --i)
+				randmp3 = randmp3->pNext;
+			
+			if ( bUseRandomTable )
+				_CurMP3Pos = AudioManager.GetRandomNumber(0)     % randmp3->nTrackLength;
+			else
+			{
+				if ( localtm->tm_sec > 0 )
+				{
+					int32 s = localtm->tm_sec;
+					_CurMP3Pos = s*s*s*s*s*s*s*s                 % randmp3->nTrackLength;
+				}
+				else
+					_CurMP3Pos = AudioManager.GetRandomNumber(0) % randmp3->nTrackLength;
+			}
+		}
+		else
+			_CurMP3Pos = 0;
+		
+		_bIsMp3Active = false;
+	}
 	
 	return true;
 }
@@ -632,8 +1114,6 @@ cSampleManager::Initialise(void)
 void
 cSampleManager::Terminate(void)
 {
-	release_existing();
-
 	for (int32 i = 0; i < MAX_STREAMS; i++)
 	{
 		CStream *stream = aStream[i];
@@ -644,30 +1124,25 @@ cSampleManager::Terminate(void)
 		}
 	}
 
+	release_existing();
+
+	_DeleteMP3Entries();
+
 	CStream::Terminate();
-	
-	if ( nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] != 0 )
+
+	if ( nSampleBankMemoryStartAddress[SFX_BANK_0] != 0 )
 	{
-		free((void *)nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN]);
-		nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] = 0;
+		free((void *)nSampleBankMemoryStartAddress[SFX_BANK_0]);
+		nSampleBankMemoryStartAddress[SFX_BANK_0] = 0;
 	}
 
-	if ( nSampleBankMemoryStartAddress[SAMPLEBANK_PED] != 0 )
+	if ( nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] != 0 )
 	{
-		free((void *)nSampleBankMemoryStartAddress[SAMPLEBANK_PED]);
-		nSampleBankMemoryStartAddress[SAMPLEBANK_PED] = 0;
+		free((void *)nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS]);
+		nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = 0;
 	}
 	
 	_bSampmanInitialised = false;
-}
-
-void
-cSampleManager::UpdateSoundBuffers(void)
-{	
-	for ( int32 i = 0; i < SAMPLEBANK_MAX; i++ )
-	{
-		ALBuffers[i].Update();
-	}
 }
 
 bool cSampleManager::CheckForAnAudioFileOnCD(void)
@@ -731,24 +1206,39 @@ cSampleManager::SetMonoMode(uint8 nMode)
 bool
 cSampleManager::LoadSampleBank(uint8 nBank)
 {
-	ASSERT( nBank < MAX_SAMPLEBANKS );
+	ASSERT( nBank < MAX_SFX_BANKS);
 	
 	if ( CTimer::GetIsCodePaused() )
 		return false;
 	
 	if ( MusicManager.IsInitialised()
 		&& MusicManager.GetMusicMode() == MUSICMODE_CUTSCENE
-		&& nBank != SAMPLEBANK_MAIN )
+		&& nBank != SFX_BANK_0 )
 	{
 		return false;
 	}
 	
+#ifdef OPUS_SFX
+	int samplesRead = 0;
+	int samplesSize = nSampleBankSize[nBank] / 2;
+	op_pcm_seek(fpSampleDataHandle, 0);
+	while (samplesSize > 0) {
+		int size = op_read(fpSampleDataHandle, (opus_int16 *)(nSampleBankMemoryStartAddress[nBank] + samplesRead), samplesSize, NULL);
+		if (size <= 0) {
+			// huh?
+			//assert(0);
+			break;
+		}
+		samplesRead += size*2;
+		samplesSize -= size;
+	}
+#else
 	if ( fseek(fpSampleDataHandle, nSampleBankDiscStartOffset[nBank], SEEK_SET) != 0 )
 		return false;
 	
 	if ( fread((void *)nSampleBankMemoryStartAddress[nBank], 1, nSampleBankSize[nBank], fpSampleDataHandle) != nSampleBankSize[nBank] )
 		return false;
-	
+#endif
 	bSampleBankLoaded[nBank] = true;
 	
 	return true;
@@ -757,7 +1247,7 @@ cSampleManager::LoadSampleBank(uint8 nBank)
 void
 cSampleManager::UnloadSampleBank(uint8 nBank)
 {
-	ASSERT( nBank < MAX_SAMPLEBANKS );
+	ASSERT( nBank < MAX_SFX_BANKS);
 	
 	bSampleBankLoaded[nBank] = false;
 }
@@ -765,7 +1255,7 @@ cSampleManager::UnloadSampleBank(uint8 nBank)
 bool
 cSampleManager::IsSampleBankLoaded(uint8 nBank)
 {
-	ASSERT( nBank < MAX_SAMPLEBANKS );
+	ASSERT( nBank < MAX_SFX_BANKS);
 	
 	return bSampleBankLoaded[nBank];
 }
@@ -840,21 +1330,30 @@ cSampleManager::LoadPedComment(uint32 nComment)
 			}
 		}
 	}
-	
+
+#ifdef OPUS_SFX
+	int samplesRead = 0;
+	int samplesSize = m_aSamples[nComment].nSize / 2;
+	op_pcm_seek(fpSampleDataHandle, m_aSamples[nComment].nOffset / 2);
+	while (samplesSize > 0) {
+		int size = op_read(fpSampleDataHandle, (opus_int16 *)(nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] + PED_BLOCKSIZE * nCurrentPedSlot + samplesRead),
+		                   samplesSize, NULL);
+		if (size <= 0) {
+			return false;
+		}
+		samplesRead += size * 2;
+		samplesSize -= size;
+	}
+#else
 	if ( fseek(fpSampleDataHandle, m_aSamples[nComment].nOffset, SEEK_SET) != 0 )
 		return false;
 	
-	if ( fread((void *)(nSampleBankMemoryStartAddress[SAMPLEBANK_PED] + PED_BLOCKSIZE*nCurrentPedSlot), 1, m_aSamples[nComment].nSize, fpSampleDataHandle) != m_aSamples[nComment].nSize )
+	if ( fread((void *)(nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] + PED_BLOCKSIZE*nCurrentPedSlot), 1, m_aSamples[nComment].nSize, fpSampleDataHandle) != m_aSamples[nComment].nSize )
 		return false;
-	
+
+#endif
 	nPedSlotSfx[nCurrentPedSlot] = nComment;
-	
-	alBufferData(pedBuffers[nCurrentPedSlot],
-		AL_FORMAT_MONO16,
-		(void *)(nSampleBankMemoryStartAddress[SAMPLEBANK_PED] + PED_BLOCKSIZE*nCurrentPedSlot),
-		m_aSamples[nComment].nSize,
-		m_aSamples[nComment].nFrequency);
-	
+		
 	if ( ++nCurrentPedSlot >= MAX_PEDSFX )
 		nCurrentPedSlot = 0;
 	
@@ -864,13 +1363,13 @@ cSampleManager::LoadPedComment(uint32 nComment)
 int32
 cSampleManager::GetBankContainingSound(uint32 offset)
 {
-	if ( offset >= BankStartOffset[SAMPLEBANK_PED] )
-		return SAMPLEBANK_PED;
+	if ( offset >= BankStartOffset[SFX_BANK_PED_COMMENTS] )
+		return SFX_BANK_PED_COMMENTS;
 	
-	if ( offset >= BankStartOffset[SAMPLEBANK_MAIN] )
-		return SAMPLEBANK_MAIN;
+	if ( offset >= BankStartOffset[SFX_BANK_0] )
+		return SFX_BANK_0;
 	
-	return SAMPLEBANK_INVALID;
+	return INVALID_SFX_BANK;
 }
 
 int32
@@ -990,25 +1489,14 @@ cSampleManager::InitialiseChannel(uint32 nChannel, uint32 nSfx, uint8 nBank)
 {
 	ASSERT( nChannel < MAXCHANNELS+MAX2DCHANNELS );
 	
-	ALuint buffer;
+	uintptr addr;
 	
 	if ( nSfx < SAMPLEBANK_MAX )
 	{
 		if ( !IsSampleBankLoaded(nBank) )
 			return false;
 		
-		uintptr addr = nSampleBankMemoryStartAddress[nBank] + m_aSamples[nSfx].nOffset - m_aSamples[BankStartOffset[nBank]].nOffset;
-	
-		if ( ALBuffers[nSfx].IsEmpty() )
-		{
-			ALuint buf;
-			alGenBuffers(1, &buf);
-			alBufferData(buf, AL_FORMAT_MONO16, (void *)addr, m_aSamples[nSfx].nSize, m_aSamples[nSfx].nFrequency);
-			ALBuffers[nSfx].Set(buf);
-		}
-		ALBuffers[nSfx].Wait();
-		
-		buffer = ALBuffers[nSfx].buffer;
+		addr = nSampleBankMemoryStartAddress[nBank] + m_aSamples[nSfx].nOffset - m_aSamples[BankStartOffset[nBank]].nOffset;
 	}
 	else
 	{
@@ -1016,14 +1504,7 @@ cSampleManager::InitialiseChannel(uint32 nChannel, uint32 nSfx, uint8 nBank)
 			return false;
 		
 		int32 slot = _GetPedCommentSlot(nSfx);
-		
-		buffer = pedBuffers[slot];
-	}
-	
-	if ( buffer == 0 )
-	{
-		TRACE("No buffer to play id %d", nSfx);
-		return false;
+		addr = (nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] + PED_BLOCKSIZE * slot);
 	}
 	
 	if ( GetChannelUsedFlag(nChannel) )
@@ -1035,10 +1516,8 @@ cSampleManager::InitialiseChannel(uint32 nChannel, uint32 nSfx, uint8 nBank)
 	aChannel[nChannel].Reset();
 	if ( aChannel[nChannel].HasSource() )
 	{	
-		aChannel[nChannel].SetSampleID     (nSfx);
-		aChannel[nChannel].SetFreq         (m_aSamples[nSfx].nFrequency);
+		aChannel[nChannel].SetSampleData   ((void*)addr, m_aSamples[nSfx].nSize, m_aSamples[nSfx].nFrequency);
 		aChannel[nChannel].SetLoopPoints   (0, -1);
-		aChannel[nChannel].SetBuffer       (buffer);
 		aChannel[nChannel].SetPitch        (1.0f);
 		return true;
 	}
@@ -1174,7 +1653,7 @@ cSampleManager::StopChannel(uint32 nChannel)
 void
 cSampleManager::PreloadStreamedFile(uint8 nFile, uint8 nStream)
 {
-	char filename[256];
+	char filename[MAX_PATH];
 	
 	ASSERT( nStream < MAX_STREAMS );
 
@@ -1188,7 +1667,7 @@ cSampleManager::PreloadStreamedFile(uint8 nFile, uint8 nStream)
 		
 		strcpy(filename, StreamedNameTable[nFile]);
 		
-		CStream *stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream]);
+		CStream *stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
 		ASSERT(stream != NULL);
 		
 		aStream[nStream] = stream;
@@ -1232,6 +1711,7 @@ cSampleManager::StartPreloadedStreamedFile(uint8 nStream)
 bool
 cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
 {
+	uint32 position = nPos;
 	char filename[256];
 	
 	ASSERT( nStream < MAX_STREAMS );
@@ -1244,28 +1724,152 @@ cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
 			aStream[nStream] = NULL;
 		}
 		
+		if ( nFile == STREAMED_SOUND_RADIO_MP3_PLAYER )
+		{
+			uint32 i = 0;
+			do {
+				if(i != 0 || _bIsMp3Active) {
+					if(++_CurMP3Index >= nNumMP3s) _CurMP3Index = 0;
+
+					_CurMP3Pos = 0;
+
+					tMP3Entry *mp3 = _GetMP3EntryByIndex(_CurMP3Index);
+
+					if(mp3) {
+						mp3 = _pMP3List;
+						if(mp3 == NULL) {
+							_bIsMp3Active = false;
+							nFile = 0;
+							strcat(filename, StreamedNameTable[nFile]);
+
+							CStream* stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
+							ASSERT(stream != NULL);
+
+							aStream[nStream] = stream;
+
+							if (stream->IsOpened()) {
+								if (stream->Setup()) {
+									if (position != 0)
+										stream->SetPosMS(position);
+
+									stream->Start();
+								}
+
+								return true;
+							} else {
+								delete stream;
+								aStream[nStream] = NULL;
+							}
+
+							return false;
+						}
+					}
+
+					if (mp3->pLinkPath != NULL)
+						aStream[nStream] = new CStream(mp3->pLinkPath, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
+					else {
+						strcpy(filename, _mp3DirectoryPath);
+						strcat(filename, mp3->aFilename);
+
+						aStream[nStream] = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
+					}
+
+					if (aStream[nStream]->IsOpened()) {
+						if (aStream[nStream]->Setup()) {
+							aStream[nStream]->Start();
+						}
+
+						return true;
+					} else {
+						delete aStream[nStream];
+						aStream[nStream] = NULL;
+					}
+
+					_bIsMp3Active = false;
+					continue;
+				}
+				if ( nPos > nStreamLength[STREAMED_SOUND_RADIO_MP3_PLAYER] )
+					position = 0;
+				
+				tMP3Entry *e;
+				if ( !_GetMP3PosFromStreamPos(&position, &e) )
+				{
+					if ( e == NULL )
+					{
+						nFile = 0;
+						strcat(filename, StreamedNameTable[nFile]);
+						CStream* stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
+						ASSERT(stream != NULL);
+
+						aStream[nStream] = stream;
+
+						if (stream->IsOpened()) {
+							if (stream->Setup()) {
+								if (position != 0)
+									stream->SetPosMS(position);
+
+								stream->Start();
+							}
+
+							return true;
+						} else {
+							delete stream;
+							aStream[nStream] = NULL;
+						}
+
+						return false;
+					}
+				}
+
+				if (e->pLinkPath != NULL)
+					aStream[nStream] = new CStream(e->pLinkPath, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
+				else {
+					strcpy(filename, _mp3DirectoryPath);
+					strcat(filename, e->aFilename);
+
+					aStream[nStream] = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream]);
+				}
+
+				if (aStream[nStream]->IsOpened()) {
+					if (aStream[nStream]->Setup()) {
+						if (position != 0)
+							aStream[nStream]->SetPosMS(position);
+
+						aStream[nStream]->Start();
+					}
+
+					_bIsMp3Active = true;
+					return true;
+				} else {
+					delete aStream[nStream];
+					aStream[nStream] = NULL;
+				}
+				
+				_bIsMp3Active = false;
+
+			} while(++i < nNumMP3s);
+
+			position = 0;
+			nFile = 0;
+		}
+
 		strcpy(filename, StreamedNameTable[nFile]);
 		
-		CStream *stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream]);
+		CStream *stream = new CStream(filename, ALStreamSources[nStream], ALStreamBuffers[nStream], IsThisTrackAt16KHz(nFile) ? 16000 : 32000);
 		ASSERT(stream != NULL);
 
 		aStream[nStream] = stream;
 		
-		if ( stream->IsOpened() )
-		{
-			nStreamLength[nFile] = stream->GetLengthMS();
-			if ( stream->Setup() )
-			{
-				if ( nPos != 0 )
-					stream->SetPosMS(nPos);
-				
+		if ( stream->IsOpened() ) {
+			if ( stream->Setup() ) {
+				if (position != 0)
+					stream->SetPosMS(position);	
+
 				stream->Start();
 			}
 			
 			return true;
-		}
-		else
-		{
+		} else {
 			delete stream;
 			aStream[nStream] = NULL;
 		}
@@ -1364,20 +1968,18 @@ cSampleManager::Service(void)
 		if ( stream )
 			stream->Update();
 	}
-	
-	UpdateSoundBuffers();
 }
 
 bool
 cSampleManager::InitialiseSampleBanks(void)
 {
-	int32 nBank = SAMPLEBANK_MAIN;
+	int32 nBank = SFX_BANK_0;
 	
-	fpSampleDescHandle = fopen(SampleBankDescFilename, "rb");
+	fpSampleDescHandle = fcaseopen(SampleBankDescFilename, "rb");
 	if ( fpSampleDescHandle == NULL )
 		return false;
-	
-	fpSampleDataHandle = fopen(SampleBankDataFilename, "rb");
+#ifndef OPUS_SFX
+	fpSampleDataHandle = fcaseopen(SampleBankDataFilename, "rb");
 	if ( fpSampleDataHandle == NULL )
 	{
 		fclose(fpSampleDescHandle);
@@ -1389,28 +1991,32 @@ cSampleManager::InitialiseSampleBanks(void)
 	fseek(fpSampleDataHandle, 0, SEEK_END);
 	int32 _nSampleDataEndOffset = ftell(fpSampleDataHandle);
 	rewind(fpSampleDataHandle);
-	
+#else
+	int e;
+	fpSampleDataHandle = op_open_file(SampleBankDataFilename, &e);
+#endif
 	fread(m_aSamples, sizeof(tSample), TOTAL_AUDIO_SAMPLES, fpSampleDescHandle);
-	
+#ifdef OPUS_SFX
+	int32 _nSampleDataEndOffset = m_aSamples[TOTAL_AUDIO_SAMPLES - 1].nOffset + m_aSamples[TOTAL_AUDIO_SAMPLES - 1].nSize;
+#endif
 	fclose(fpSampleDescHandle);
 	fpSampleDescHandle = NULL;
 	
 	for ( int32 i = 0; i < TOTAL_AUDIO_SAMPLES; i++ )
 	{
 #ifdef FIX_BUGS
-		if (nBank >= MAX_SAMPLEBANKS) break;
+		if (nBank >= MAX_SFX_BANKS) break;
 #endif
-		if ( BankStartOffset[nBank] == BankStartOffset[SAMPLEBANK_MAIN] + i )
+		if ( BankStartOffset[nBank] == BankStartOffset[SFX_BANK_0] + i )
 		{
 			nSampleBankDiscStartOffset[nBank] = m_aSamples[i].nOffset;
 			nBank++;
 		}
 	}
 
-	nSampleBankSize[SAMPLEBANK_MAIN] = nSampleBankDiscStartOffset[SAMPLEBANK_PED] - nSampleBankDiscStartOffset[SAMPLEBANK_MAIN];
-	nSampleBankSize[SAMPLEBANK_PED]  = _nSampleDataEndOffset                      - nSampleBankDiscStartOffset[SAMPLEBANK_PED];
-	
+	nSampleBankSize[SFX_BANK_0] = nSampleBankDiscStartOffset[SFX_BANK_PED_COMMENTS] - nSampleBankDiscStartOffset[SFX_BANK_0];
+	nSampleBankSize[SFX_BANK_PED_COMMENTS]  = _nSampleDataEndOffset                      - nSampleBankDiscStartOffset[SFX_BANK_PED_COMMENTS];
+
 	return true;
 }
-
 #endif

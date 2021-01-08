@@ -10,17 +10,12 @@ public:
 
 	float Magnitude(void) const { return Sqrt(x*x + y*y + z*z + w*w); }
 	float MagnitudeSqr(void) const { return x*x + y*y + z*z + w*w; }
-	void Normalise(void) {
-		float sq = MagnitudeSqr();
-		if(sq == 0.0f)
-			w = 1.0f;
-		else{
-			float invsqrt = RecipSqrt(sq);
-			x *= invsqrt;
-			y *= invsqrt;
-			z *= invsqrt;
-			w *= invsqrt;
-		}
+	void Normalise(void);
+	void Multiply(const CQuaternion &q1, const CQuaternion &q2);
+	void Invert(void){	// Conjugate would have been a better name
+		x = -x;
+		y = -y;
+		z = -z;
 	}
 
 	const CQuaternion &operator+=(CQuaternion const &right) {
@@ -60,8 +55,12 @@ public:
 	}
 
 	void Slerp(const CQuaternion &q1, const CQuaternion &q2, float theta, float invSin, float t);
+	void Get(RwV3d *axis, float *angle);
 	void Set(RwV3d *axis, float angle);
 	void Get(RwMatrix *matrix);
+	void Set(const RwMatrix &matrix);
+	void Set(float f1, float f2, float f3);
+	void Get(float *f1, float *f2, float *f3);
 };
 
 inline float

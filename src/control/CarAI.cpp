@@ -381,7 +381,7 @@ void CCarAI::UpdateCarAI(CVehicle* pVehicle)
 					if (flatSpeed < SQR(0.018f) && CTimer::GetTimeInMilliseconds() - pVehicle->AutoPilot.m_nAntiReverseTimer > 2000){
 						pVehicle->AutoPilot.m_nTempAction = TEMPACT_REVERSE;
 						if (pVehicle->AutoPilot.m_nCarMission != MISSION_NONE &&
-						  pVehicle->AutoPilot.m_nCarMission != MISSION_CRUISE || pVehicle->VehicleCreatedBy == RANDOM_VEHICLE)
+						  pVehicle->AutoPilot.m_nCarMission != MISSION_CRUISE || pVehicle->VehicleCreatedBy == MISSION_VEHICLE)
 							pVehicle->AutoPilot.m_nTimeTempAction = CTimer::GetTimeInMilliseconds() + 1500;
 						else
 							pVehicle->AutoPilot.m_nTimeTempAction = CTimer::GetTimeInMilliseconds() + 750;
@@ -406,7 +406,7 @@ void CCarAI::UpdateCarAI(CVehicle* pVehicle)
 			pVehicle->AutoPilot.m_nTimeTempAction = CTimer::GetTimeInMilliseconds() + 400;
 		}
 	}
-	if (pVehicle->GetUp().z < 0.7f){
+	if (pVehicle->GetUp().z < -0.7f){
 		pVehicle->AutoPilot.m_nTempAction = TEMPACT_WAIT;
 		pVehicle->AutoPilot.m_nTimeTempAction = CTimer::GetTimeInMilliseconds() + 1000;
 	}
@@ -509,14 +509,14 @@ void CCarAI::AddFiretruckOccupants(CVehicle* pVehicle)
 void CCarAI::TellOccupantsToLeaveCar(CVehicle* pVehicle)
 {
 	if (pVehicle->pDriver){
-		pVehicle->pDriver->SetObjective(OBJECTIVE_LEAVE_VEHICLE, pVehicle);
+		pVehicle->pDriver->SetObjective(OBJECTIVE_LEAVE_CAR, pVehicle);
 		if (pVehicle->GetModelIndex() == MI_AMBULAN)
 			pVehicle->pDriver->Say(SOUND_PED_LEAVE_VEHICLE);
 	}
 	int timer = 100;
 	for (int i = 0; i < pVehicle->m_nNumMaxPassengers; i++){
 		if (pVehicle->pPassengers[i]) {
-			pVehicle->pPassengers[i]->SetObjective(OBJECTIVE_LEAVE_VEHICLE, pVehicle);
+			pVehicle->pPassengers[i]->SetObjective(OBJECTIVE_LEAVE_CAR, pVehicle);
 		}
 	}
 }
@@ -539,7 +539,7 @@ void CCarAI::TellCarToBlockOtherCar(CVehicle* pVehicle, CVehicle* pTarget)
 	pVehicle->AutoPilot.m_nCruiseSpeed = Max(6, pVehicle->AutoPilot.m_nCruiseSpeed);
 }
 
-eCarMission CCarAI::FindPoliceCarMissionForWantedLevel()
+uint8 CCarAI::FindPoliceCarMissionForWantedLevel()
 {
 	switch (CWorld::Players[CWorld::PlayerInFocus].m_pPed->m_pWanted->m_nWantedLevel){
 	case 0:

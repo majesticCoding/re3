@@ -1,47 +1,29 @@
 #pragma once
 
-class CVector
+class CVector : public RwV3d
 {
 public:
-	float x, y, z;
 	CVector(void) {}
-	CVector(float x, float y, float z) : x(x), y(y), z(z) {}
-#ifdef RWCORE_H
-	CVector(const RwV3d &v) : x(v.x), y(v.y), z(v.z) {}
+	CVector(float x, float y, float z)
+	{
+		this->x = x;
+		this->y = y;
+		this->z = z;
+	}
 
-	operator RwV3d (void) const {
-		RwV3d vecRw = { this->x, this->y, this->z };
-		return vecRw;
+	CVector(const RwV3d &v)
+	{
+		x = v.x;
+		y = v.y;
+		z = v.z;
 	}
-	
-	operator RwV3d *(void) {
-		return (RwV3d*)this;
-	}
-#endif
 	// (0,1,0) means no rotation. So get right vector and its atan
 	float Heading(void) const { return Atan2(-x, y); }
 	float Magnitude(void) const { return Sqrt(x*x + y*y + z*z); }
 	float MagnitudeSqr(void) const { return x*x + y*y + z*z; }
 	float Magnitude2D(void) const { return Sqrt(x*x + y*y); }
 	float MagnitudeSqr2D(void) const { return x*x + y*y; }
-	void Normalise(void) {
-		float sq = MagnitudeSqr();
-		if(sq > 0.0f){
-			float invsqrt = RecipSqrt(sq);
-			x *= invsqrt;
-			y *= invsqrt;
-			z *= invsqrt;
-		}else
-			x = 1.0f;
-	}
-	
-	void Normalise(float norm) {
-		float sq = MagnitudeSqr();
-		float invsqrt = RecipSqrt(norm, sq);
-		x *= invsqrt;
-		y *= invsqrt;
-		z *= invsqrt;
-	}
+	void Normalise(void);
 	
 	void Normalise2D(void) {
 		float sq = MagnitudeSqr2D();
@@ -124,17 +106,24 @@ DotProduct(const CVector &v1, const CVector &v2)
 	return v1.x*v2.x + v1.y*v2.y + v1.z*v2.z;
 }
 
-inline const CVector
-CrossProduct(const CVector &v1, const CVector &v2)
-{
-	return CVector(
-		v1.y*v2.z - v1.z*v2.y,
-		v1.z*v2.x - v1.x*v2.z,
-		v1.x*v2.y - v1.y*v2.x);
-}
+CVector CrossProduct(const CVector &v1, const CVector &v2);
 
 inline float
 Distance(const CVector &v1, const CVector &v2)
 {
 	return (v2 - v1).Magnitude();
 }
+
+inline float
+Distance2D(const CVector &v1, const CVector &v2)
+{
+	float x = v2.x - v1.x;
+	float y = v2.y - v1.y;
+	return Sqrt(x*x + y*y);
+}
+
+class CMatrix;
+
+CVector Multiply3x3(const CMatrix &mat, const CVector &vec);
+CVector Multiply3x3(const CVector &vec, const CMatrix &mat);
+CVector operator*(const CMatrix &mat, const CVector &vec);

@@ -7,6 +7,7 @@
 #include "Clock.h"
 #include "Text.h"
 #include "World.h"
+#include "Timer.h"
 
 eLevelName CTheZones::m_CurrLevel;
 CZone *CTheZones::m_pPlayersZone;
@@ -90,7 +91,7 @@ CTheZones::Init(void)
 	TotalNumberOfZoneInfos = 1;	// why 1?
 	TotalNumberOfZones = 1;
 
-	m_CurrLevel = LEVEL_NONE;
+	m_CurrLevel = LEVEL_GENERIC;
 	m_pPlayersZone = &ZoneArray[0];
 
 	strcpy(ZoneArray[0].name, "CITYZON");
@@ -100,7 +101,7 @@ CTheZones::Init(void)
 	ZoneArray[0].maxx =  4000.0f;
 	ZoneArray[0].maxy =  4000.0f;
 	ZoneArray[0].maxz =  500.0f;
-	ZoneArray[0].level = LEVEL_NONE;
+	ZoneArray[0].level = LEVEL_GENERIC;
 
 	for(i = 0; i < NUMMAPZONES; i++){
 		memset(&MapZoneArray[i], 0, sizeof(CZone));
@@ -116,12 +117,16 @@ CTheZones::Init(void)
 	MapZoneArray[0].maxx =  4000.0f;
 	MapZoneArray[0].maxy =  4000.0f;
 	MapZoneArray[0].maxz =  500.0f;
-	MapZoneArray[0].level = LEVEL_NONE;
+	MapZoneArray[0].level = LEVEL_GENERIC;
 }
 
 void
 CTheZones::Update(void)
 {
+#ifdef SQUEEZE_PERFORMANCE
+	if (CTimer::GetFrameCounter() % 5 != 0)
+		return;
+#endif
 	CVector pos;
 	pos = FindPlayerCoors();
 	m_pPlayersZone = FindSmallestZonePosition(&pos);
@@ -577,7 +582,7 @@ CTheZones::FindZoneForPoint(const CVector &pos)
 		return LEVEL_COMMERCIAL;
 	if(PointLiesWithinZone(&pos, GetZone(FindZoneByLabelAndReturnIndex("SUB_ZON"))))
 		return LEVEL_SUBURBAN;
-	return LEVEL_NONE;
+	return LEVEL_GENERIC;
 }
 
 void

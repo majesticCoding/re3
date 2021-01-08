@@ -50,8 +50,8 @@ NodeNameStreamWrite(RwStream *stream, RwInt32 binaryLength, const void *object, 
 RwInt32
 NodeNameStreamGetSize(const void *object, RwInt32 offsetInObject, RwInt32 sizeInObject)
 {
-	// game checks for null pointer on node name extension but that really happen
-	return rwstrlen(NODENAMEEXT(object));
+	char *name = NODENAMEEXT(object);	// can't be nil
+	return name ? (RwInt32)rwstrlen(name) : 0;
 }
 
 bool

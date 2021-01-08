@@ -21,7 +21,7 @@
 #pragma comment( lib, "mss32.lib" )
 
 cSampleManager SampleManager;
-uint32 BankStartOffset[MAX_SAMPLEBANKS];
+uint32 BankStartOffset[MAX_SFX_BANKS];
 ///////////////////////////////////////////////////////////////
 
 char SampleBankDescFilename[] = "AUDIO\\SFX.SDT";
@@ -29,10 +29,10 @@ char SampleBankDataFilename[] = "AUDIO\\SFX.RAW";
 
 FILE *fpSampleDescHandle;
 FILE *fpSampleDataHandle;
-bool  bSampleBankLoaded            [MAX_SAMPLEBANKS];
-int32 nSampleBankDiscStartOffset   [MAX_SAMPLEBANKS];
-int32 nSampleBankSize              [MAX_SAMPLEBANKS];
-int32 nSampleBankMemoryStartAddress[MAX_SAMPLEBANKS];
+bool  bSampleBankLoaded            [MAX_SFX_BANKS];
+int32 nSampleBankDiscStartOffset   [MAX_SFX_BANKS];
+int32 nSampleBankSize              [MAX_SFX_BANKS];
+int32 nSampleBankMemoryStartAddress[MAX_SFX_BANKS];
 int32 _nSampleDataEndOffset;
 
 int32 nPedSlotSfx    [MAX_PEDSFX];
@@ -65,7 +65,7 @@ uint32 _CurMP3Index;
 int32 _CurMP3Pos;
 bool _bIsMp3Active;
 
-#if defined(GTA3_1_1_PATCH) || defined(GTA3_STEAM_PATCH) || defined(NO_CDCHECK)
+#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
 bool _bUseHDDAudio;
 char _aHDDPath[MAX_PATH];
 #endif
@@ -896,7 +896,7 @@ cSampleManager::Initialise(void)
 		
 		_nSampleDataEndOffset = 0;
 		
-		for ( int32 i = 0; i < MAX_SAMPLEBANKS; i++ )
+		for ( int32 i = 0; i < MAX_SFX_BANKS; i++ )
 		{
 			bSampleBankLoaded[i]             = false;
 			nSampleBankDiscStartOffset[i]    = 0;
@@ -948,17 +948,26 @@ cSampleManager::Initialise(void)
 			return false;
 		}
 		
-		nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] = (int32)AIL_mem_alloc_lock(nSampleBankSize[SAMPLEBANK_MAIN]);
-		if ( !nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] )
+		nSampleBankMemoryStartAddress[SFX_BANK_0] = (int32)AIL_mem_alloc_lock(nSampleBankSize[SFX_BANK_0]);
+		if ( !nSampleBankMemoryStartAddress[SFX_BANK_0] )
 		{
 			Terminate();
 			return false;
 		}
 
-		nSampleBankMemoryStartAddress[SAMPLEBANK_PED] = (int32)AIL_mem_alloc_lock(PED_BLOCKSIZE*MAX_PEDSFX);
+		nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = (int32)AIL_mem_alloc_lock(PED_BLOCKSIZE*MAX_PEDSFX);
 		
 	}
 	
+#ifdef AUDIO_CACHE
+	TRACE("cache");
+	FILE *cacheFile = fopen("audio\\sound.cache", "rb");
+	if (cacheFile) {
+		fread(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
+		fclose(cacheFile);
+		m_bInitialised = true;
+	}else {
+#endif
 	TRACE("cdrom");
 	
 	S32 tatalms;
@@ -1034,7 +1043,7 @@ cSampleManager::Initialise(void)
 					
 			if ( !m_bInitialised )
 			{
-#if !defined(GTA3_STEAM_PATCH) && !defined(NO_CDCHECK)
+#if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
 				FrontEndMenuManager.WaitForUserCD();
 				if ( FrontEndMenuManager.m_bQuitGameNoCD )
 				{
@@ -1051,7 +1060,7 @@ cSampleManager::Initialise(void)
 		}
 	}
 
-#if defined(GTA3_1_1_PATCH) || defined(GTA3_STEAM_PATCH) || defined(NO_CDCHECK)
+#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
 	// hddaudio
 	/**
 		Option for user to play audio files directly from hard disk.
@@ -1115,7 +1124,13 @@ cSampleManager::Initialise(void)
 			_bUseHDDAudio = false;
 	}
 #endif
-	
+#ifdef AUDIO_CACHE
+	cacheFile = fopen("audio\\sound.cache", "wb");
+	fwrite(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
+	fclose(cacheFile);
+	}
+#endif
+
 	TRACE("stream");
 	{
 		for ( int32 i = 0; i < MAX_STREAMS; i++ )
@@ -1161,7 +1176,7 @@ cSampleManager::Initialise(void)
 	
 	TRACE("bank");
 	
-	LoadSampleBank(SAMPLEBANK_MAIN);
+	LoadSampleBank(SFX_BANK_0);
 	
 	// mp3
 	TRACE("mp3");
@@ -1256,16 +1271,16 @@ cSampleManager::Terminate(void)
 	
 	_DeleteMP3Entries();
 	
-	if ( nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] != 0 )
+	if ( nSampleBankMemoryStartAddress[SFX_BANK_0] != 0 )
 	{
-		AIL_mem_free_lock((void *)nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN]);
-		nSampleBankMemoryStartAddress[SAMPLEBANK_MAIN] = 0;
+		AIL_mem_free_lock((void *)nSampleBankMemoryStartAddress[SFX_BANK_0]);
+		nSampleBankMemoryStartAddress[SFX_BANK_0] = 0;
 	}
 
-	if ( nSampleBankMemoryStartAddress[SAMPLEBANK_PED] != 0 )
+	if ( nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] != 0 )
 	{
-		AIL_mem_free_lock((void *)nSampleBankMemoryStartAddress[SAMPLEBANK_PED]);
-		nSampleBankMemoryStartAddress[SAMPLEBANK_PED] = 0;
+		AIL_mem_free_lock((void *)nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS]);
+		nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = 0;
 	}
 	
 	if ( DIG )
@@ -1282,17 +1297,17 @@ cSampleManager::Terminate(void)
 bool
 cSampleManager::CheckForAnAudioFileOnCD(void)
 {
-#if !defined(GTA3_STEAM_PATCH) && !defined(NO_CDCHECK)
+#if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
 	char filepath[MAX_PATH];
 	
-#if defined(GTA3_1_1_PATCH)
+#if GTA_VERSION >= GTA3_PC_11
 	if (_bUseHDDAudio)
 		strcpy(filepath, _aHDDPath);
 	else
 		strcpy(filepath, m_szCDRomRootPath);
 #else
 	strcpy(filepath, m_szCDRomRootPath);
-#endif // #if defined(GTA3_1_1_PATCH)
+#endif // #if GTA_VERSION >= GTA3_PC_11
 
 	strcat(filepath, StreamedNameTable[AudioManager.GetRandomNumber(1) % TOTAL_STREAMED_SOUNDS]);
 	
@@ -1309,13 +1324,13 @@ cSampleManager::CheckForAnAudioFileOnCD(void)
 	
 #else
 	return true;
-#endif // #if !defined(GTA3_STEAM_PATCH) && !defined(NO_CDCHECK)
+#endif // #if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
 }
 
 char
 cSampleManager::GetCDAudioDriveLetter(void)
 {
-#if defined(GTA3_1_1_PATCH) || defined(GTA3_STEAM_PATCH) || defined(NO_CDCHECK)
+#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
 	if (_bUseHDDAudio)
 	{
 		if ( strlen(_aHDDPath) != 0 )
@@ -1414,7 +1429,7 @@ cSampleManager::LoadSampleBank(uint8 nBank)
 	
 	if ( MusicManager.IsInitialised()
 		&& MusicManager.GetMusicMode() == MUSICMODE_CUTSCENE
-		&& nBank != SAMPLEBANK_MAIN )
+		&& nBank != SFX_BANK_0 )
 	{
 		return false;
 	}
@@ -1511,10 +1526,10 @@ cSampleManager::LoadPedComment(uint32 nComment)
 	if ( fseek(fpSampleDataHandle, m_aSamples[nComment].nOffset, SEEK_SET) != 0 )
 		return false;
 	
-	if ( fread((void *)(nSampleBankMemoryStartAddress[SAMPLEBANK_PED] + PED_BLOCKSIZE*nCurrentPedSlot), 1, m_aSamples[nComment].nSize, fpSampleDataHandle) != m_aSamples[nComment].nSize )
+	if ( fread((void *)(nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] + PED_BLOCKSIZE*nCurrentPedSlot), 1, m_aSamples[nComment].nSize, fpSampleDataHandle) != m_aSamples[nComment].nSize )
 		return false;
 	
-	nPedSlotSfxAddr[nCurrentPedSlot] = nSampleBankMemoryStartAddress[SAMPLEBANK_PED] + PED_BLOCKSIZE*nCurrentPedSlot;
+	nPedSlotSfxAddr[nCurrentPedSlot] = nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] + PED_BLOCKSIZE*nCurrentPedSlot;
 	nPedSlotSfx    [nCurrentPedSlot] = nComment;
 	
 	if ( ++nCurrentPedSlot >= MAX_PEDSFX )
@@ -1526,13 +1541,13 @@ cSampleManager::LoadPedComment(uint32 nComment)
 int32
 cSampleManager::GetBankContainingSound(uint32 offset)
 {
-	if ( offset >= BankStartOffset[SAMPLEBANK_PED] )
-		return SAMPLEBANK_PED;
+	if ( offset >= BankStartOffset[SFX_BANK_PED_COMMENTS] )
+		return SFX_BANK_PED_COMMENTS;
 	
-	if ( offset >= BankStartOffset[SAMPLEBANK_MAIN] )
-		return SAMPLEBANK_MAIN;
+	if ( offset >= BankStartOffset[SFX_BANK_0] )
+		return SFX_BANK_0;
 	
-	return SAMPLEBANK_INVALID;
+	return INVALID_SFX_BANK;
 }
 
 int32
@@ -2274,7 +2289,7 @@ cSampleManager::IsStreamPlaying(uint8 nStream)
 bool
 cSampleManager::InitialiseSampleBanks(void)
 {
-	int32 nBank = SAMPLEBANK_MAIN;
+	int32 nBank = SFX_BANK_0;
 	
 	fpSampleDescHandle = fopen(SampleBankDescFilename, "rb");
 	if ( fpSampleDescHandle == NULL )
@@ -2301,17 +2316,17 @@ cSampleManager::InitialiseSampleBanks(void)
 	for ( int32 i = 0; i < TOTAL_AUDIO_SAMPLES; i++ )
 	{
 #ifdef FIX_BUGS
-		if (nBank >= MAX_SAMPLEBANKS) break;
+		if (nBank >= MAX_SFX_BANKS) break;
 #endif
-		if ( BankStartOffset[nBank] == BankStartOffset[SAMPLEBANK_MAIN] + i )
+		if ( BankStartOffset[nBank] == BankStartOffset[SFX_BANK_0] + i )
 		{
 			nSampleBankDiscStartOffset[nBank] = m_aSamples[i].nOffset;
 			nBank++;
 		}
 	}
 
-	nSampleBankSize[SAMPLEBANK_MAIN] = nSampleBankDiscStartOffset[SAMPLEBANK_PED] - nSampleBankDiscStartOffset[SAMPLEBANK_MAIN];
-	nSampleBankSize[SAMPLEBANK_PED] = _nSampleDataEndOffset                       - nSampleBankDiscStartOffset[SAMPLEBANK_PED];
+	nSampleBankSize[SFX_BANK_0] = nSampleBankDiscStartOffset[SFX_BANK_PED_COMMENTS] - nSampleBankDiscStartOffset[SFX_BANK_0];
+	nSampleBankSize[SFX_BANK_PED_COMMENTS] = _nSampleDataEndOffset                       - nSampleBankDiscStartOffset[SFX_BANK_PED_COMMENTS];
 	
 	return true;
 }

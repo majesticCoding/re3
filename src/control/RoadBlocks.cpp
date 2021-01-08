@@ -90,8 +90,7 @@ CRoadBlocks::GenerateRoadBlockCopsForCar(CVehicle* pVehicle, int32 roadBlockType
 		pCopPed->m_nRoadblockNode = roadBlockNode;
 		pCopPed->bCrouchWhenShooting = roadBlockType != 2;
 		if (pEntityToAttack) {
-			pCopPed->m_pPointGunAt = pEntityToAttack;
-			pEntityToAttack->RegisterReference(&pCopPed->m_pPointGunAt);
+			pCopPed->SetWeaponLockOnTarget(pEntityToAttack);
 			pCopPed->SetAttack(pEntityToAttack);
 		}
 		pCopPed->m_pMyVehicle = pVehicle;
@@ -105,6 +104,10 @@ CRoadBlocks::GenerateRoadBlockCopsForCar(CVehicle* pVehicle, int32 roadBlockType
 void 
 CRoadBlocks::GenerateRoadBlocks(void) 
 { 
+#ifdef SQUEEZE_PERFORMANCE
+	if (FindPlayerPed()->m_pWanted->m_RoadblockDensity == 0)
+		return;
+#endif
 	CMatrix offsetMatrix;
 	uint32 frame = CTimer::GetFrameCounter() & 0xF;
 	int16 nRoadblockNode = (int16)(NUMROADBLOCKS * frame) / 16;
@@ -161,7 +164,7 @@ CRoadBlocks::GenerateRoadBlocks(void)
 							vehicleMatrix.GetPosition().z += fModelRadius - 0.6f;
 							pVehicle->m_matrix = vehicleMatrix;
 							pVehicle->PlaceOnRoadProperly();
-							pVehicle->bIsStatic = false;
+							pVehicle->SetIsStatic(false);
 							pVehicle->m_matrix.UpdateRW();
 							pVehicle->m_nDoorLock = CARLOCK_UNLOCKED;
 							CCarCtrl::JoinCarWithRoadSystem(pVehicle);

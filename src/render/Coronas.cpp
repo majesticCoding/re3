@@ -2,6 +2,7 @@
 
 #include "main.h"
 #include "General.h"
+#include "Entity.h"
 #include "TxdStore.h"
 #include "Camera.h"
 #include "Sprite.h"
@@ -11,6 +12,10 @@
 #include "Collision.h"
 #include "Timecycle.h"
 #include "Coronas.h"
+#include "PointLights.h"
+#include "Shadows.h"
+#include "Clock.h"
+#include "Bridge.h"
 
 struct FlareDef
 {
@@ -255,7 +260,10 @@ CCoronas::Render(void)
 
 		CVector spriteCoors;
 		float spritew, spriteh;
-		if(CSprite::CalcScreenCoors(aCoronas[i].coors, spriteCoors, &spritew, &spriteh, true)){
+		if(!CSprite::CalcScreenCoors(aCoronas[i].coors, &spriteCoors, &spritew, &spriteh, true)){
+			aCoronas[i].offScreen = true;
+			aCoronas[i].sightClear = false;
+		}else{
 			aCoronas[i].offScreen = false;
 
 			if(spriteCoors.x < 0.0f || spriteCoors.y < 0.0f ||
@@ -289,10 +297,7 @@ CCoronas::Render(void)
 			}
 
 
-			if(aCoronas[i].fadeAlpha == 0)
-				continue;
-
-			if(spriteCoors.z < aCoronas[i].drawDist){
+			if(aCoronas[i].fadeAlpha && spriteCoors.z < aCoronas[i].drawDist){
 				float recipz = 1.0f/spriteCoors.z;
 				float fadeDistance = aCoronas[i].drawDist / 2.0f;
 				float distanceFade = spriteCoors.z < fadeDistance ? 1.0f : 1.0f - (spriteCoors.z - fadeDistance)/fadeDistance;
@@ -367,9 +372,6 @@ CCoronas::Render(void)
 							recipz, 255);
 					}
 				}
-			}else{
-				aCoronas[i].offScreen = true;
-				aCoronas[i].sightClear = false;
 			}
 		}
 	}
@@ -390,23 +392,24 @@ CCoronas::Render(void)
 			if(!aCoronas[i].hasValue[j] || !aCoronas[i].hasValue[j+1])
 				continue;
 
-			int mod1 = (float)(6 - j) / 6 * 128;
-			int mod2 = (float)(6 - (j+1)) / 6 * 128;
+			int alpha1 = (float)(6 - j) / 6 * 128;
+			int alpha2 = (float)(6 - (j+1)) / 6 * 128;
 
 			RwIm2DVertexSetScreenX(&vertexbufferX[0], aCoronas[i].prevX[j]);
 			RwIm2DVertexSetScreenY(&vertexbufferX[0], aCoronas[i].prevY[j]);
-			RwIm2DVertexSetIntRGBA(&vertexbufferX[0], aCoronas[i].prevRed[j] * mod1 / 256, aCoronas[i].prevGreen[j] * mod1 / 256, aCoronas[i].prevBlue[j] * mod1 / 256, 255);
+			RwIm2DVertexSetIntRGBA(&vertexbufferX[0], aCoronas[i].prevRed[j] * alpha1 / 256, aCoronas[i].prevGreen[j] * alpha1 / 256, aCoronas[i].prevBlue[j] * alpha1 / 256, 255);
 			RwIm2DVertexSetScreenX(&vertexbufferX[1], aCoronas[i].prevX[j+1]);
 			RwIm2DVertexSetScreenY(&vertexbufferX[1], aCoronas[i].prevY[j+1]);
-			RwIm2DVertexSetIntRGBA(&vertexbufferX[1], aCoronas[i].prevRed[j+1] * mod2 / 256, aCoronas[i].prevGreen[j+1] * mod2 / 256, aCoronas[i].prevBlue[j+1] * mod2 / 256, 255);
+			RwIm2DVertexSetIntRGBA(&vertexbufferX[1], aCoronas[i].prevRed[j+1] * alpha2 / 256, aCoronas[i].prevGreen[j+1] * alpha2 / 256, aCoronas[i].prevBlue[j+1] * alpha2 / 256, 255);
 
-			// BUG: game doesn't do this
+#ifdef FIX_BUGS
 			RwIm2DVertexSetScreenZ(&vertexbufferX[0], RwIm2DGetNearScreenZ());
 			RwIm2DVertexSetCameraZ(&vertexbufferX[0], RwCameraGetNearClipPlane(Scene.camera));
 			RwIm2DVertexSetRecipCameraZ(&vertexbufferX[0], 1.0f/RwCameraGetNearClipPlane(Scene.camera));
 			RwIm2DVertexSetScreenZ(&vertexbufferX[1], RwIm2DGetNearScreenZ());
 			RwIm2DVertexSetCameraZ(&vertexbufferX[1], RwCameraGetNearClipPlane(Scene.camera));
 			RwIm2DVertexSetRecipCameraZ(&vertexbufferX[1], 1.0f/RwCameraGetNearClipPlane(Scene.camera));
+#endif
 
 			RwIm2DRenderLine(vertexbufferX, 2, 0, 1);
 		}
@@ -425,6 +428,10 @@ CCoronas::RenderReflections(void)
 	CEntity *entity;
 
 	if(CWeather::WetRoads > 0.0f){
+#ifdef FIX_BUGS
+		CSprite::InitSpriteBuffer();
+#endif
+
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
@@ -435,7 +442,8 @@ CCoronas::RenderReflections(void)
 
 		for(i = 0; i < NUMCORONAS; i++){
 			if(aCoronas[i].id == 0 ||
-			   aCoronas[i].fadeAlpha == 0 && aCoronas[i].alpha == 0)
+			   aCoronas[i].fadeAlpha == 0 && aCoronas[i].alpha == 0 ||
+			   aCoronas[i].reflection == 0)
 				continue;
 
 			// check if we want a reflection on this corona
@@ -450,11 +458,8 @@ CCoronas::RenderReflections(void)
 				}
 			}
 
-			if(!aCoronas[i].renderReflection)
-				continue;
-
 			// Don't draw if reflection is too high
-			if(aCoronas[i].heightAboveRoad < 20.0f){
+			if(aCoronas[i].renderReflection && aCoronas[i].heightAboveRoad < 20.0f){
 				// don't draw if camera is below road
 				if(CCoronas::aCoronas[i].coors.z - aCoronas[i].heightAboveRoad > TheCamera.GetPosition().z)
 					continue;
@@ -464,18 +469,23 @@ CCoronas::RenderReflections(void)
 
 				CVector spriteCoors;
 				float spritew, spriteh;
-				if(CSprite::CalcScreenCoors(coors, spriteCoors, &spritew, &spriteh, true)){
+				if(CSprite::CalcScreenCoors(coors, &spriteCoors, &spritew, &spriteh, true)){
 					float drawDist = 0.75f * aCoronas[i].drawDist;
-					drawDist = Min(drawDist, 50.0f);
+					drawDist = Min(drawDist, 55.0f);
 					if(spriteCoors.z < drawDist){
 						float fadeDistance = drawDist / 2.0f;
 						float distanceFade = spriteCoors.z < fadeDistance ? 1.0f : 1.0f - (spriteCoors.z - fadeDistance)/fadeDistance;
 						distanceFade = clamp(distanceFade, 0.0f, 1.0f);
 						float recipz = 1.0f/RwCameraGetNearClipPlane(Scene.camera);
-						int intensity = (20.0f - aCoronas[i].heightAboveRoad) * 230.0 * distanceFade*CWeather::WetRoads * 0.05f;
+						float heightFade = (20.0f - aCoronas[i].heightAboveRoad)/20.0f;
+						int intensity = distanceFade*heightFade * 230.0 * CWeather::WetRoads;
 
 						CSprite::RenderBufferedOneXLUSprite(
+#ifdef FIX_BUGS
+							spriteCoors.x, spriteCoors.y, spriteCoors.z,
+#else
 							spriteCoors.x, spriteCoors.y, RwIm2DGetNearScreenZ(),
+#endif
 							spritew * aCoronas[i].size * 0.75f,
 							spriteh * aCoronas[i].size * 2.0f,
 							(intensity * CCoronas::aCoronas[i].red)>>8,
@@ -526,7 +536,7 @@ CCoronas::DoSunAndMoon(void)
 
 	CVector spriteCoors;
 	float spritew, spriteh;
-	if(CSprite::CalcScreenCoors(sunCoors, spriteCoors, &spritew, &spriteh, true)){
+	if(CSprite::CalcScreenCoors(sunCoors, &spriteCoors, &spritew, &spriteh, true)){
 		SunScreenX = spriteCoors.x;
 		SunScreenY = spriteCoors.y;
 	}else{
@@ -571,4 +581,191 @@ CRegisteredCorona::Update(void)
 		id = 0;
 	firstUpdate = false;
 	registeredThisFrame = false;
+}
+
+void
+CEntity::ProcessLightsForEntity(void)
+{
+	int i, n;
+	C2dEffect *effect;
+	CVector pos;
+	bool lightOn, lightFlickering;
+	uint32 flashTimer1, flashTimer2, flashTimer3;
+
+	if(bRenderDamaged || !bIsVisible || GetUp().z < 0.96f)
+		return;
+
+	flashTimer1 = 0;
+	flashTimer2 = 0;
+	flashTimer3 = 0;
+
+	n = CModelInfo::GetModelInfo(GetModelIndex())->GetNum2dEffects();
+	for(i = 0; i < n; i++, flashTimer1 += 0x80, flashTimer2 += 0x100, flashTimer3 += 0x200){
+		effect = CModelInfo::GetModelInfo(GetModelIndex())->Get2dEffect(i);
+
+		if(effect->type != EFFECT_LIGHT)
+			continue;
+
+		pos = GetMatrix() * effect->pos;
+
+		lightOn = false;
+		lightFlickering = false;
+		switch(effect->light.lightType){
+		case LIGHT_ON:
+			lightOn = true;
+			break;
+		case LIGHT_ON_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				lightOn = true;
+			break;
+		case LIGHT_FLICKER:
+			if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed) & 0x60)
+				lightOn = true;
+			else
+				lightFlickering = true;
+			if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed) & 3)
+				lightOn = true;
+			break;
+		case LIGHT_FLICKER_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7 || CWeather::WetRoads > 0.5f){
+				if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed) & 0x60)
+					lightOn = true;
+				else
+					lightFlickering = true;
+				if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed) & 3)
+					lightOn = true;
+			}
+			break;
+		case LIGHT_FLASH1:
+			if((CTimer::GetTimeInMilliseconds() + flashTimer1) & 0x200)
+				lightOn = true;
+			break;
+		case LIGHT_FLASH1_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				if((CTimer::GetTimeInMilliseconds() + flashTimer1) & 0x200)
+					lightOn = true;
+			break;
+		case LIGHT_FLASH2:
+			if((CTimer::GetTimeInMilliseconds() + flashTimer2) & 0x400)
+				lightOn = true;
+			break;
+		case LIGHT_FLASH2_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				if((CTimer::GetTimeInMilliseconds() + flashTimer2) & 0x400)
+					lightOn = true;
+			break;
+		case LIGHT_FLASH3:
+			if((CTimer::GetTimeInMilliseconds() + flashTimer3) & 0x800)
+				lightOn = true;
+			break;
+		case LIGHT_FLASH3_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				if((CTimer::GetTimeInMilliseconds() + flashTimer3) & 0x800)
+					lightOn = true;
+			break;
+		case LIGHT_RANDOM_FLICKER:
+			if(m_randomSeed > 16)
+				lightOn = true;
+			else{
+				if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed*8) & 0x60)
+					lightOn = true;
+				else
+					lightFlickering = true;
+				if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed*8) & 3)
+					lightOn = true;
+			}
+			break;
+		case LIGHT_RANDOM_FLICKER_NIGHT:
+			if(CClock::GetHours() > 18 || CClock::GetHours() < 7){
+				if(m_randomSeed > 16)
+					lightOn = true;
+				else{
+					if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed*8) & 0x60)
+						lightOn = true;
+					else
+						lightFlickering = true;
+					if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed*8) & 3)
+						lightOn = true;
+				}
+			}
+			break;
+		case LIGHT_BRIDGE_FLASH1:
+			if(CBridge::ShouldLightsBeFlashing() && CTimer::GetTimeInMilliseconds() & 0x200)
+				lightOn = true;
+			break;
+		case LIGHT_BRIDGE_FLASH2:
+			if(CBridge::ShouldLightsBeFlashing() && (CTimer::GetTimeInMilliseconds() & 0x1FF) < 60)
+				lightOn = true;
+			break;
+		}
+
+		// Corona
+		if(lightOn)
+			CCoronas::RegisterCorona((uintptr)this + i,
+				effect->col.r, effect->col.g, effect->col.b, 255,
+				pos, effect->light.size, effect->light.dist,
+				effect->light.corona, effect->light.flareType, effect->light.roadReflection,
+				effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f);
+		else if(lightFlickering)
+			CCoronas::RegisterCorona((uintptr)this + i,
+				0, 0, 0, 255,
+				pos, effect->light.size, effect->light.dist,
+				effect->light.corona, effect->light.flareType, effect->light.roadReflection,
+				effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f);
+
+		// Pointlight
+		if(effect->light.flags & LIGHTFLAG_FOG_ALWAYS){
+			CPointLights::AddLight(CPointLights::LIGHT_FOGONLY_ALWAYS,
+				pos, CVector(0.0f, 0.0f, 0.0f),
+				effect->light.range,
+				effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
+				CPointLights::FOG_ALWAYS, true);
+		}else if(effect->light.flags & LIGHTFLAG_FOG_NORMAL && lightOn && effect->light.range == 0.0f){
+			CPointLights::AddLight(CPointLights::LIGHT_FOGONLY,
+				pos, CVector(0.0f, 0.0f, 0.0f),
+				effect->light.range,
+				effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
+				CPointLights::FOG_NORMAL, true);
+		}else if(lightOn && effect->light.range != 0.0f){
+			if(effect->col.r == 0 && effect->col.g == 0 && effect->col.b == 0){
+				CPointLights::AddLight(CPointLights::LIGHT_POINT,
+					pos, CVector(0.0f, 0.0f, 0.0f),
+					effect->light.range,
+					0.0f, 0.0f, 0.0f,
+					CPointLights::FOG_NONE, true);
+			}else{
+				CPointLights::AddLight(CPointLights::LIGHT_POINT,
+					pos, CVector(0.0f, 0.0f, 0.0f),
+					effect->light.range,
+					effect->col.r*CTimeCycle::GetSpriteBrightness()/255.0f,
+					effect->col.g*CTimeCycle::GetSpriteBrightness()/255.0f,
+					effect->col.b*CTimeCycle::GetSpriteBrightness()/255.0f,
+					// half-useless because LIGHTFLAG_FOG_ALWAYS can't be on
+					(effect->light.flags & LIGHTFLAG_FOG) >> 1,
+					true);
+			}
+		}
+
+		// Light shadow
+		if(effect->light.shadowSize != 0.0f){
+			if(lightOn){
+				CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
+					effect->light.shadow, &pos,
+					effect->light.shadowSize, 0.0f,
+					0.0f, -effect->light.shadowSize,
+					128,
+					effect->col.r*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+					effect->col.g*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+					effect->col.b*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+					15.0f, 1.0f, 40.0f, false, 0.0f);
+			}else if(lightFlickering){
+				CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
+					effect->light.shadow, &pos,
+					effect->light.shadowSize, 0.0f,
+					0.0f, -effect->light.shadowSize,
+					0, 0.0f, 0.0f, 0.0f,
+					15.0f, 1.0f, 40.0f, false, 0.0f);
+			}
+		}
+	}
 }

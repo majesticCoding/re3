@@ -5,6 +5,7 @@
 #include "CdStream.h"
 #include "rwcore.h"
 #include "RwHelper.h"
+#include "MemoryMgr.h"
 
 #define CDDEBUG(f, ...)   debug ("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
 #define CDTRACE(f, ...)   printf("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
@@ -72,7 +73,11 @@ CdStreamInitThread(void)
 	gChannelRequestQ.size = gNumChannels + 1;
 	ASSERT(gChannelRequestQ.items != nil );
 	
+#ifdef FIX_BUGS
+	gCdStreamSema = CreateSemaphore(nil, 0, 5, nil);
+#else
 	gCdStreamSema = CreateSemaphore(nil, 0, 5, "CdStream");
+#endif
 	
 	if ( gCdStreamSema == nil )
 	{
@@ -106,12 +111,14 @@ CdStreamInit(int32 numChannels)
 	GetDiskFreeSpace(nil, &SectorsPerCluster, &BytesPerSector, &NumberOfFreeClusters, &TotalNumberOfClusters);
 	
 	_gdwCdStreamFlags = 0;
-	
+
+#ifndef FIX_BUGS // this just slows down streaming
 	if ( BytesPerSector <= CDSTREAM_SECTOR_SIZE )
 	{
 		_gdwCdStreamFlags |= FILE_FLAG_NO_BUFFERING;
 		debug("Using no buffered loading for streaming\n");
 	}
+#endif
 	
 	_gbCdStreamOverlapped = TRUE;
 
@@ -240,8 +247,15 @@ CdStreamRead(int32 channel, void *buffer, uint32 offset, uint32 size)
 		else
 			return STREAM_SUCCESS;
 	}
-	
+
+#ifdef BIG_IMG
+	LARGE_INTEGER liDistanceToMove;
+	liDistanceToMove.QuadPart = _GET_OFFSET(offset);
+	liDistanceToMove.QuadPart *= CDSTREAM_SECTOR_SIZE;
+	SetFilePointerEx(hImage, liDistanceToMove, nil, FILE_BEGIN);
+#else
 	SetFilePointer(hImage, _GET_OFFSET(offset) * CDSTREAM_SECTOR_SIZE, nil, FILE_BEGIN);
+#endif
 	
 	DWORD NumberOfBytesRead;
 	

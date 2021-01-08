@@ -22,6 +22,7 @@
 #include "DummyObject.h"
 #include "Script.h"
 #include "Shadows.h"
+#include "Bike.h"
 
 #define MIN_CREATION_DIST		40.0f // not for start of the game (look at the GeneratePedsAtStartOfGame)
 #define CREATION_RANGE			10.0f // added over the MIN_CREATION_DIST.
@@ -117,8 +118,7 @@ CPopulation::Initialise()
 void
 CPopulation::RemovePed(CPed *ent)
 {
-	// CPed dtor already does that
-	// CWorld::Remove((CEntity*)ent);
+	CWorld::Remove((CEntity*)ent);
 	delete ent;
 }
 
@@ -394,7 +394,7 @@ CPopulation::FindCollisionZoneForCoors(CVector *coors, int *safeZoneOut, eLevelN
 	}
 	// Then it's transition area
 	if (*safeZoneOut >= 0)
-		*levelOut = LEVEL_NONE;
+		*levelOut = LEVEL_GENERIC;
 	else
 		*levelOut = CTheZones::GetLevelFromPosition(coors);
 }
@@ -719,10 +719,10 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 			if (i != 0) {
 				// Gang member
 				newPed->SetLeader(gangLeader);
-#ifndef FIX_BUGS
+#if !defined(FIX_BUGS) && GTA_VERSION >= GTA3_PC_10
 				// seems to be a miami leftover (this code is not on PS2) but gang peds end up just being frozen
-				newPed->m_nPedState = PED_UNKNOWN;
-				gangLeader->m_nPedState = PED_UNKNOWN;
+				newPed->SetPedState(PED_UNKNOWN);
+				gangLeader->SetPedState(PED_UNKNOWN);
 				newPed->m_fRotationCur = CGeneral::GetRadianAngleBetweenPoints(
 					gangLeader->GetPosition().x, gangLeader->GetPosition().y,
 					newPed->GetPosition().x, newPed->GetPosition().y);
@@ -834,11 +834,11 @@ CPopulation::AddPedInCar(CVehicle* car)
 		newPed->SetCurrentWeapon(WEAPONTYPE_COLT45);
 		newPed->RemoveWeaponModel(CWeaponInfo::GetWeaponInfo(newPed->GetWeapon()->m_eWeaponType)->m_nModelId);
 	}
-	/*
+	
 	// Miami leftover
 	if (car->m_vehType == VEHICLE_TYPE_BIKE) {
-		newPed->m_pVehicleAnim = CAnimManager::BlendAnimation(newPed->GetClump(), ASSOCGRP_STD, *((CBike*)car + 308h), 100.0f);
-	} else */
+		newPed->m_pVehicleAnim = CAnimManager::BlendAnimation(newPed->GetClump(), ASSOCGRP_STD, ((CBike*)car)->m_bikeSitAnimation, 100.0f);
+	} else 
 
 	// FIX: Make peds comfortable while driving car/boat
 #ifdef FIX_BUGS
@@ -867,7 +867,7 @@ CPopulation::MoveCarsAndPedsOutOfAbandonedZones()
 		for (int poolIndex = poolSize - 1; poolIndex >= 0; poolIndex--) {
 
 			CVehicle* veh = CPools::GetVehiclePool()->GetSlot(poolIndex);
-			if (veh && veh->m_nZoneLevel == LEVEL_NONE && veh->IsCar()) {
+			if (veh && veh->m_nZoneLevel == LEVEL_GENERIC && veh->IsCar()) {
 
 				if(veh->GetStatus() != STATUS_ABANDONED && veh->GetStatus() != STATUS_WRECKED && veh->GetStatus() != STATUS_PLAYER &&
 					veh->GetStatus() != STATUS_PLAYER_REMOTE) {
@@ -876,7 +876,7 @@ CPopulation::MoveCarsAndPedsOutOfAbandonedZones()
 					CPopulation::FindCollisionZoneForCoors(&vehPos, &zone, &level);
 
 					// Level 0 is transition zones, and we don't wanna touch cars on transition zones.
-					if (level != LEVEL_NONE && level != CCollision::ms_collisionInMemory && vehPos.z > -4.0f) {
+					if (level != LEVEL_GENERIC && level != CCollision::ms_collisionInMemory && vehPos.z > -4.0f) {
 						if (veh->bIsLocked || !veh->CanBeDeleted()) {
 							switch (movedVehicleCount & 3) {
 								case 0:
@@ -913,13 +913,13 @@ CPopulation::MoveCarsAndPedsOutOfAbandonedZones()
 		for (int poolIndex = poolSize - 1; poolIndex >= 0; poolIndex--) {
 
 			CPed *ped = CPools::GetPedPool()->GetSlot(poolIndex);
-			if (ped && ped->m_nZoneLevel == LEVEL_NONE && !ped->bInVehicle) {
+			if (ped && ped->m_nZoneLevel == LEVEL_GENERIC && !ped->bInVehicle) {
 
 				CVector pedPos(ped->GetPosition());
 				CPopulation::FindCollisionZoneForCoors(&pedPos, &zone, &level);
 
 				// Level 0 is transition zones, and we don't wanna touch peds on transition zones.
-				if (level != LEVEL_NONE && level != CCollision::ms_collisionInMemory && pedPos.z > -4.0f) {
+				if (level != LEVEL_GENERIC && level != CCollision::ms_collisionInMemory && pedPos.z > -4.0f) {
 					if (ped->CanBeDeleted()) {
 						CWorld::Remove(ped);
 						delete ped;
@@ -973,7 +973,7 @@ CPopulation::ConvertToRealObject(CDummyObject *dummy)
 	if (IsGlass(obj->GetModelIndex())) {
 		obj->bIsVisible = false;
 	} else if (obj->GetModelIndex() == MI_BUOY) {
-		obj->bIsStatic = false;
+		obj->SetIsStatic(false);
 		obj->m_vecMoveSpeed = CVector(0.0f, 0.0f, -0.001f);
 		obj->bTouchingWater = true;
 		obj->AddToMovingList();
@@ -1104,7 +1104,11 @@ CPopulation::ManagePopulation(void)
 	}
 
 	int pedPoolSize = CPools::GetPedPool()->GetSize();
+#ifndef SQUEEZE_PERFORMANCE
 	for (int poolIndex = pedPoolSize-1; poolIndex >= 0; poolIndex--) {
+#else
+	for (int poolIndex = (pedPoolSize * (frameMod32 + 1) / 32) - 1; poolIndex >= pedPoolSize * frameMod32 / 32; poolIndex--) {
+#endif
 		CPed *ped = CPools::GetPedPool()->GetSlot(poolIndex);
 
 		if (ped && !ped->IsPlayer() && ped->CanBeDeleted() && !ped->bInVehicle) {
@@ -1117,6 +1121,13 @@ CPopulation::ManagePopulation(void)
 			}
 
 			float dist = (ped->GetPosition() - playerPos).Magnitude2D();
+#ifdef SQUEEZE_PERFORMANCE
+			if (dist > 50.f)
+				ped->bUsesCollision = false;
+			else
+				ped->bUsesCollision = true;
+#endif
+
 			bool pedIsFarAway = false;
 			if (PedCreationDistMultiplier() * (PED_REMOVE_DIST_SPECIAL * TheCamera.GenerationDistMultiplier) < dist
 				|| (!ped->bCullExtraFarAway && PedCreationDistMultiplier() * PED_REMOVE_DIST * TheCamera.GenerationDistMultiplier < dist)

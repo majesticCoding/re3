@@ -17,7 +17,11 @@
 
 #if defined _WIN32 && defined WITHD3D
 #include <windows.h>
+#ifndef USE_D3D9
 #include <d3d8types.h>
+#else
+#include <d3d9types.h>
+#endif
 #endif
 
 #include <rwcore.h>
@@ -37,6 +41,7 @@
 #define HIERNODEINFO(hier) ((hier)->pNodeInfo)
 #define HIERNODEID(hier, i) ((hier)->pNodeInfo[i].nodeID)
 #define HANIMFRAME(anim, i) ((RwUInt8*)(anim)->pFrames + (i)*(anim)->interpInfo->keyFrameSize)
+#define RpHAnimStdInterpFrame RpHAnimStdKeyFrame
 #endif
 
 #ifdef RWHALFPIXEL
@@ -68,10 +73,15 @@ typedef int16_t int16;
 typedef uint32_t uint32;
 typedef int32_t int32;
 typedef uintptr_t uintptr;
+typedef intptr_t intptr;
 typedef uint64_t uint64;
 typedef int64_t int64;
 // hardcode ucs-2
 typedef uint16_t wchar;
+
+#if defined(_MSC_VER)
+typedef ptrdiff_t ssize_t;
+#endif
 
 #ifndef nil
 #define nil NULL
@@ -84,6 +94,16 @@ typedef uint16_t wchar;
 #include <rpskin.h>
 #endif
 
+#ifdef __GNUC__
+#define TYPEALIGN(n) __attribute__ ((aligned (n)))
+#else
+#ifdef _MSC_VER
+#define TYPEALIGN(n) __declspec(align(n))
+#else
+#define TYPEALIGN(n)	// unknown compiler...ignore
+#endif
+#endif
+
 #define ALIGNPTR(p) (void*)((((uintptr)(void*)p) + sizeof(void*)-1) & ~(sizeof(void*)-1))
 
 // PDP-10 like byte functions
@@ -91,7 +111,7 @@ typedef uint16_t wchar;
 inline uint32 dpb(uint32 b, uint32 p, uint32 s, uint32 w)
 {
 	uint32 m = MASK(p,s);
-	return w & ~m | b<<p & m;
+	return (w & ~m) | ((b<<p) & m);
 }
 inline uint32 ldb(uint32 p, uint32 s, uint32 w)
 {
@@ -101,17 +121,45 @@ inline uint32 ldb(uint32 p, uint32 s, uint32 w)
 #include "skeleton.h"
 #include "Draw.h"
 
-#define DEFAULT_SCREEN_WIDTH (640)
-#define DEFAULT_SCREEN_HEIGHT (448)
+#if defined(USE_PROPER_SCALING)
+	#ifdef FORCE_PC_SCALING
+		#define DEFAULT_SCREEN_WIDTH  (640)
+		#define DEFAULT_SCREEN_HEIGHT (448)
+	#else
+		#define DEFAULT_SCREEN_WIDTH  (640)
+		#define DEFAULT_SCREEN_HEIGHT (480)
+	#endif
+#elif defined(GTA_PS2)
+		#define DEFAULT_SCREEN_WIDTH  (640)
+		#define DEFAULT_SCREEN_HEIGHT (480)
+#else //elif defined(GTA_PC)
+		#define DEFAULT_SCREEN_WIDTH  (640)
+		#define DEFAULT_SCREEN_HEIGHT (448)
+#endif
+
 #define DEFAULT_ASPECT_RATIO (4.0f/3.0f)
 #define DEFAULT_VIEWWINDOW (0.7f)
 
 // game uses maximumWidth/Height, but this probably won't work
 // with RW windowed mode
-#define SCREEN_WIDTH ((float)RsGlobal.width)
+#ifdef GTA_PS2
+	#ifdef GTA_PAL
+		#define SCREEN_WIDTH  ((float)640)
+		#define SCREEN_HEIGHT ((float)512)
+	#else
+		#define SCREEN_WIDTH  ((float)640)
+		#define SCREEN_HEIGHT ((float)448)
+	#endif
+#else
+#define SCREEN_WIDTH  ((float)RsGlobal.width)
 #define SCREEN_HEIGHT ((float)RsGlobal.height)
+#endif
+
+#define SCREEN_HEIGHT_PAL (512)
+#define SCREEN_HEIGHT_NTSC (448)
+
 #define SCREEN_ASPECT_RATIO (CDraw::GetAspectRatio())
-#define SCREEN_VIEWWINDOW (Tan(DEGTORAD(CDraw::GetFOV() * 0.5f)))
+#define SCREEN_VIEWWINDOW (Tan(DEGTORAD(CDraw::GetScaledFOV() * 0.5f)))
 
 // This scales from PS2 pixel coordinates to the real resolution
 #define SCREEN_STRETCH_X(a)   ((a) * (float) SCREEN_WIDTH / DEFAULT_SCREEN_WIDTH)
@@ -127,8 +175,11 @@ inline uint32 ldb(uint32 p, uint32 s, uint32 w)
 
 #ifdef ASPECT_RATIO_SCALE
 #define SCREEN_SCALE_AR(a) ((a) * DEFAULT_ASPECT_RATIO / SCREEN_ASPECT_RATIO)
+extern float ScaleAndCenterX(float x);
+#define SCALE_AND_CENTER_X(x) ScaleAndCenterX(x)
 #else
 #define SCREEN_SCALE_AR(a) (a)
+#define SCALE_AND_CENTER_X(x) SCREEN_STRETCH_X(x)
 #endif
 
 #include "maths.h"
@@ -152,6 +203,16 @@ public:
 	
 	CRGBA(void) { }
 	CRGBA(uint8 r, uint8 g, uint8 b, uint8 a) : r(r), g(g), b(b), a(a) { }
+	
+	bool operator ==(const CRGBA &right)
+	{
+		return this->r == right.r && this->g == right.g && this->b == right.b && this->a == right.a;
+	}
+	
+	bool operator !=(const CRGBA &right)
+	{
+		return !(*this == right);
+	}
 	
 	CRGBA &operator =(const CRGBA &right)
 	{
@@ -189,6 +250,8 @@ public:
 extern int strcasecmp(const char *str1, const char *str2);
 #endif
 
+extern wchar *AllocUnicode(const char*src);
+
 #define clamp(v, low, high) ((v)<(low) ? (low) : (v)>(high) ? (high) : (v))
 
 inline float sq(float x) { return x*x; }
@@ -216,8 +279,14 @@ void re3_usererror(const char *format, ...);
 
 #define DEBUGBREAK() __debugbreak();
 
-#define debug(f, ...) re3_debug("[DBG]: " f, ## __VA_ARGS__)
+// Switch to enable development messages.
+#if 1 
+#define DEV(f, ...)
+#else
 #define DEV(f, ...)   re3_debug("[DEV]: " f, ## __VA_ARGS__)
+#endif
+
+#define debug(f, ...) re3_debug("[DBG]: " f, ## __VA_ARGS__)
 #define TRACE(f, ...) re3_trace(__FILE__, __LINE__, __FUNCTION__, f, ## __VA_ARGS__)
 #define Error(f, ...) re3_debug("[ERROR]: " f, ## __VA_ARGS__)
 #define USERERROR(f, ...) re3_usererror(f, ## __VA_ARGS__)

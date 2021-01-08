@@ -9,6 +9,7 @@
 #include "Timer.h"
 #include "VehicleModelInfo.h"
 #include "World.h"
+#include "Frontend.h"
 
 uint16 CRecordDataForGame::RecordingState;
 uint8* CRecordDataForGame::pDataBuffer;
@@ -390,15 +391,17 @@ void CRecordDataForChase::ProcessControlCars(void)
 	}
 }
 
-#if (defined(GTA_PS2) || defined(FIX_BUGS))
 bool CRecordDataForChase::ShouldThisPadBeLeftAlone(uint8 pad)
 {
 	// may be wrong
-	if (Status == STATE_NONE || Status == STATE_PLAYBACK)
+	if (Status == STATE_PLAYBACK_INIT) // this is useless but ps2 def checks if it's STATE_PLAYBACK_INIT
 		return false;
-	return pad != 0;
+
+	if (Status == STATE_RECORD)
+		return pad != 0;
+
+	return false;
 }
-#endif
 
 void CRecordDataForChase::GiveUsACar(int32 mi, CVector pos, float angle, CAutomobile** ppCar, uint8 colour1, uint8 colour2)
 {
@@ -426,8 +429,8 @@ void RemoveUnusedCollision(void)
 		"com_rvroads52", "com_roadsrv", "com_roadkb23", "com_roadkb22"
 	};
 	for (int i = 0; i < ARRAY_SIZE(dontDeleteArray); i++)
-		CModelInfo::GetModelInfo(dontDeleteArray[i], nil)->GetColModel()->level = LEVEL_NONE;
-	CModelInfo::RemoveColModelsFromOtherLevels(LEVEL_NONE);
+		CModelInfo::GetModelInfo(dontDeleteArray[i], nil)->GetColModel()->level = LEVEL_GENERIC;
+	CModelInfo::RemoveColModelsFromOtherLevels(LEVEL_GENERIC);
 	for (int i = 0; i < ARRAY_SIZE(dontDeleteArray); i++)
 		CModelInfo::GetModelInfo(dontDeleteArray[i], nil)->GetColModel()->level = LEVEL_COMMERCIAL;
 }
@@ -439,7 +442,10 @@ void CRecordDataForChase::StartChaseScene(float startTime)
 	Status = STATE_PLAYBACK;
 	AnimTime = startTime;
 	AnimStartTime = CTimer::GetTimeInMilliseconds();
-	RemoveUnusedCollision();
+#ifdef NO_ISLAND_LOADING
+	if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_LOW)
+#endif
+		RemoveUnusedCollision();
 	CStreaming::RemoveIslandsNotUsed(LEVEL_SUBURBAN);
 	CGame::TidyUpMemory(true, true);
 	CStreaming::ImGonnaUseStreamingMemory();

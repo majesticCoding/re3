@@ -8,6 +8,7 @@
 #include "Messages.h"
 #include "Text.h"
 #include "main.h"
+#include "Accident.h"
 
 int32 CEventList::ms_nFirstFreeSlotIndex;
 CEvent gaEvent[NUMEVENTS];
@@ -63,6 +64,13 @@ CEventList::RegisterEvent(eEventType type, eEventEntity entityType, CEntity *ent
 	int ref;
 	bool copsDontCare;
 
+#ifdef SQUEEZE_PERFORMANCE
+	if (type == EVENT_INJURED_PED) {
+		gAccidentManager.ReportAccident((CPed*)ent);
+		return;
+	}
+#endif
+
 	copsDontCare = false;
 	switch(entityType){
 	case EVENT_ENTITY_PED:
@@ -112,7 +120,7 @@ CEventList::RegisterEvent(eEventType type, eEventEntity entityType, CEntity *ent
 	}
 
 	if(criminal == FindPlayerPed())
-		ReportCrimeForEvent(type, (uintptr)ent, copsDontCare);
+		ReportCrimeForEvent(type, (intptr)ent, copsDontCare);
 }
 
 void
@@ -190,7 +198,7 @@ CEventList::FindClosestEvent(eEventType type, CVector posn, int32 *event)
 }
 
 void
-CEventList::ReportCrimeForEvent(eEventType type, int32 crimeId, bool copsDontCare)
+CEventList::ReportCrimeForEvent(eEventType type, intptr crimeId, bool copsDontCare)
 {
 	eCrimeType crime;
 	switch(type){

@@ -1,4 +1,7 @@
 #pragma once
+#ifdef PS2_MENU
+#include "Frontend_PS2.h"
+#else
 
 #include "Sprite2d.h"
 
@@ -15,7 +18,6 @@
 
 #define MENU_X_MARGIN 40.0f
 #define MENUACTION_POS_Y 60.0f
-#define MENUACTION_WIDTH 38.0f
 #define MENUACTION_SCALE_MULT 0.9f
 
 #define MENURADIO_ICON_SCALE 60.0f
@@ -23,14 +25,17 @@
 #define MENUSLIDER_X 256.0f
 #define MENUSLIDER_UNK 256.0f
 
-#define BIGTEXT_X_SCALE 0.75f
+#define BIGTEXT_X_SCALE 0.75f // For FONT_HEADING
 #define BIGTEXT_Y_SCALE 0.9f
-#define MEDIUMTEXT_X_SCALE 0.55f
+#define MEDIUMTEXT_X_SCALE 0.55f // For FONT_HEADING
 #define MEDIUMTEXT_Y_SCALE 0.8f
-#define SMALLTEXT_X_SCALE 0.45f
+#define SMALLTEXT_X_SCALE 0.45f // used for FONT_HEADING and FONT_BANK, but looks off for HEADING 
 #define SMALLTEXT_Y_SCALE 0.7f
-#define SMALLESTTEXT_X_SCALE 0.4f
+#define SMALLESTTEXT_X_SCALE 0.4f // used for both FONT_HEADING and FONT_BANK
 #define SMALLESTTEXT_Y_SCALE 0.6f
+
+#define HELPER_TEXT_LEFT_MARGIN 320.0f
+#define HELPER_TEXT_BOTTOM_MARGIN 120.0f
 
 #define PLAYERSETUP_LIST_TOP 28.0f
 #define PLAYERSETUP_LIST_BOTTOM 125.0f
@@ -43,8 +48,6 @@
 #endif
 #define PLAYERSETUP_SCROLLBUTTON_HEIGHT 17.0f
 #define PLAYERSETUP_SCROLLBUTTON_TXD_DIMENSION 64
-#define PLAYERSETUP_ROW_TEXT_X_SCALE 0.4f
-#define PLAYERSETUP_ROW_TEXT_Y_SCALE 0.6f
 #define PLAYERSETUP_SKIN_COLUMN_LEFT 220.0f
 #define PLAYERSETUP_DATE_COLUMN_RIGHT 56.0f
 #define PLAYERSETUP_LIST_BODY_TOP 47
@@ -80,20 +83,6 @@
 #define CONTSETUP_BACK_RIGHT 35.0f
 #define CONTSETUP_BACK_BOTTOM 122.0f
 #define CONTSETUP_BACK_HEIGHT 25.0f
-
-enum eLanguages
-{
-	LANGUAGE_AMERICAN,
-	LANGUAGE_FRENCH,
-	LANGUAGE_GERMAN,
-	LANGUAGE_ITALIAN,
-	LANGUAGE_SPANISH,
-#ifdef MORE_LANGUAGES
-	LANGUAGE_POLISH,
-	LANGUAGE_RUSSIAN,
-	LANGUAGE_JAPANESE,
-#endif
-};
 
 enum eFrontendSprites
 {
@@ -166,7 +155,7 @@ enum eSaveSlot
 	SAVESLOT_6,
 	SAVESLOT_7,
 	SAVESLOT_8,
-	SAVESLOT_LABEL = 36
+	SAVESLOT_LABEL = 36,
 };
 
 #ifdef MENU_MAP
@@ -194,7 +183,7 @@ enum eMenuScreen
 	MENUPAGE_BRIEFS = 3,
 	MENUPAGE_CONTROLLER_SETTINGS = 4,
 	MENUPAGE_SOUND_SETTINGS = 5,
-	MENUPAGE_GRAPHICS_SETTINGS = 6,
+	MENUPAGE_DISPLAY_SETTINGS = 6,
 	MENUPAGE_LANGUAGE_SETTINGS = 7,
 	MENUPAGE_CHOOSE_LOAD_SLOT = 8,
 	MENUPAGE_CHOOSE_DELETE_SLOT = 9,
@@ -246,15 +235,30 @@ enum eMenuScreen
 	MENUPAGE_KEYBOARD_CONTROLS = 55,
 	MENUPAGE_MOUSE_CONTROLS = 56,
 	MENUPAGE_MISSION_RETRY = 57,
-	MENUPAGE_58 = 58,
 #ifdef MENU_MAP
-	MENUPAGE_MAP = 59,
+	MENUPAGE_MAP = 58,
 #endif
+#ifdef CUSTOM_FRONTEND_OPTIONS
+
+#ifdef GRAPHICS_MENU_OPTIONS
+	MENUPAGE_GRAPHICS_SETTINGS,
+#endif
+#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+	MENUPAGE_DETECT_JOYSTICK,
+#endif
+
+#endif
+	MENUPAGE_UNK, // originally 58. Custom screens are inserted above, because last screen in CMenuScreens should always be empty to make CFO work
 	MENUPAGES
+
 };
 
 enum eMenuAction
 {
+#ifdef CUSTOM_FRONTEND_OPTIONS
+	MENUACTION_CFO_SELECT = -2,
+	MENUACTION_CFO_DYNAMIC = -1,
+#endif
 	MENUACTION_NOTHING,
 	MENUACTION_LABEL,
 	MENUACTION_CHANGEMENU,
@@ -370,9 +374,10 @@ enum eMenuAction
 	MENUACTION_UNK112,
 	MENUACTION_REJECT_RETRY,
 	MENUACTION_UNK114,
-#ifdef CUSTOM_FRONTEND_OPTIONS
-	MENUACTION_TRIGGERFUNC
-#endif
+//#ifdef ANISOTROPIC_FILTERING
+//	MENUACTION_MIPMAPS,
+//	MENUACTION_TEXTURE_FILTERING,
+//#endif
 };
 
 enum eCheckHover
@@ -455,10 +460,11 @@ struct BottomBarOption
 	int32 screenId;
 };
 
+#ifndef CUSTOM_FRONTEND_OPTIONS
 struct CMenuScreen
 {
 	char m_ScreenName[8];
-	int32 unk; // 2 on MENUPAGE_MULTIPLAYER_START, 1 on everywhere else
+	int32 unk; // 2 on MENUPAGE_MULTIPLAYER_START, 1 on everywhere else, 0 on unused.
 	int32 m_PreviousPage[2]; // eMenuScreen
 	int32 m_ParentEntry[2]; // row
 
@@ -467,9 +473,93 @@ struct CMenuScreen
 		int32 m_Action; // eMenuAction
 		char m_EntryName[8];
 		int32 m_SaveSlot; // eSaveSlot
-		int32 m_TargetMenu; // eMenuScreen // FrontendOption ID if it's a custom option
+		int32 m_TargetMenu; // eMenuScreen
 	} m_aEntries[NUM_MENUROWS];
 };
+extern CMenuScreen aScreens[MENUPAGES];
+#else
+#include "frontendoption.h"
+struct CCustomScreenLayout {
+	eMenuSprites sprite;
+	int columnWidth;
+	int headerHeight;
+	int lineHeight;
+	int8 font;
+	int8 alignment;
+	bool showLeftRightHelper;
+	float fontScaleX;
+	float fontScaleY;
+};
+
+struct CCFO
+{
+	int8 *value;
+	const char *save;
+};
+
+struct CCFOSelect : CCFO
+{
+	char** rightTexts;
+	int8 numRightTexts;
+	bool onlyApplyOnEnter;
+	int8 displayedValue; // only if onlyApplyOnEnter enabled for now
+	int8 lastSavedValue; // only if onlyApplyOnEnter enabled
+	ChangeFunc changeFunc;
+	bool disableIfGameLoaded;
+
+	CCFOSelect() {};
+	CCFOSelect(int8* value, const char* save, const char** rightTexts, int8 numRightTexts, bool onlyApplyOnEnter, ChangeFunc changeFunc = nil, bool disableIfGameLoaded = false){
+		this->value = value;
+		if (value)
+			this->lastSavedValue = this->displayedValue = *value;
+
+		this->save = save;
+		this->rightTexts = (char**)rightTexts;
+		this->numRightTexts = numRightTexts;
+		this->onlyApplyOnEnter = onlyApplyOnEnter;
+		this->changeFunc = changeFunc;
+		this->disableIfGameLoaded = disableIfGameLoaded;
+	}
+};
+
+struct CCFODynamic : CCFO
+{
+	DrawFunc drawFunc;
+	ButtonPressFunc buttonPressFunc;
+
+	CCFODynamic() {};
+	CCFODynamic(int8* value, const char* save, DrawFunc drawFunc, ButtonPressFunc buttonPressFunc){
+		this->value = value;
+		this->save = save;
+		this->drawFunc = drawFunc;
+		this->buttonPressFunc = buttonPressFunc;
+	}
+};
+
+struct CMenuScreenCustom
+{
+	char m_ScreenName[8];
+	int32 m_PreviousPage[2]; // eMenuScreen
+	CCustomScreenLayout *layout;
+	ReturnPrevPageFunc returnPrevPageFunc;
+	
+	struct CMenuEntry
+	{
+		int32 m_Action; // eMenuAction - below zero is CFO
+		char m_EntryName[8];
+		struct {
+			union {
+				CCFO *m_CFO; // for initializing
+				CCFOSelect *m_CFOSelect;
+				CCFODynamic *m_CFODynamic;
+			};
+			int32 m_SaveSlot; // eSaveSlot
+			int32 m_TargetMenu; // eMenuScreen
+		};
+	} m_aEntries[NUM_MENUROWS];
+};
+extern CMenuScreenCustom aScreens[MENUPAGES];
+#endif
 
 class CMenuManager
 {
@@ -529,7 +619,7 @@ public:
 	int32 m_nHoverOption;
 	int32 m_nCurrScreen;
 	int32 m_nCurrOption;
-	int32 m_nPrevOption;
+	int32 m_nOptionMouseHovering;
 	int32 m_nPrevScreen;
  uint32 field_558;
 	int32 m_nCurrSaveSlot;
@@ -543,7 +633,24 @@ public:
 	int32 m_nPrefsSubsystem;
 	int32 m_nSelectedScreenMode;
 #endif
+#ifdef MULTISAMPLING
+	static int8 m_nPrefsMSAALevel;
+	static int8 m_nDisplayMSAALevel;
+#endif
 
+	enum LANGUAGE
+	{
+		LANGUAGE_AMERICAN,
+		LANGUAGE_FRENCH,
+		LANGUAGE_GERMAN,
+		LANGUAGE_ITALIAN,
+		LANGUAGE_SPANISH,
+#ifdef MORE_LANGUAGES
+		LANGUAGE_POLISH,
+		LANGUAGE_RUSSIAN,
+		LANGUAGE_JAPANESE,
+#endif
+	};
 public:
 	bool GetIsMenuActive() {return !!m_bMenuActive;}
 
@@ -580,6 +687,10 @@ public:
 	static uint8 m_PrefsPlayerGreen;
 	static uint8 m_PrefsPlayerBlue;
 
+#ifdef CUTSCENE_BORDERS_SWITCH
+	static bool m_PrefsCutsceneBorders;
+#endif
+
 #ifndef MASTER
 	static bool m_PrefsMarketing;
 	static bool m_PrefsDisableTutorials;
@@ -587,13 +698,28 @@ public:
 
 #ifdef MENU_MAP
 	static bool bMenuMapActive;
-	static bool bMapMouseShownOnce;
-	static bool bMapLoaded;
 	static float fMapSize;
 	static float fMapCenterY;
 	static float fMapCenterX;
 	static CSprite2d m_aMapSprites[NUM_MAP_SPRITES];
 	void PrintMap();
+#endif
+
+#ifdef NO_ISLAND_LOADING
+	enum
+	{
+		ISLAND_LOADING_LOW = 0,
+		ISLAND_LOADING_MEDIUM,
+		ISLAND_LOADING_HIGH
+	};
+
+	static int8 m_PrefsIslandLoading;
+
+	#define ISLAND_LOADING_IS(p) if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_##p)
+	#define ISLAND_LOADING_ISNT(p) if (CMenuManager::m_PrefsIslandLoading != CMenuManager::ISLAND_LOADING_##p)
+#else
+	#define ISLAND_LOADING_IS(p)
+	#define ISLAND_LOADING_ISNT(p)
 #endif
 
 public:
@@ -654,8 +780,7 @@ public:
 	void PageUpList(bool);
 	void PageDownList(bool);
 	int8 GetPreviousPageOption();
-	
-	// uint8 GetNumberOfMenuOptions();
+	void ProcessList(bool &goBack, bool &optionSelected);
 };
 
 #ifndef IMPROVED_VIDEOMODE
@@ -663,4 +788,5 @@ VALIDATE_SIZE(CMenuManager, 0x564);
 #endif
 
 extern CMenuManager FrontEndMenuManager;
-extern CMenuScreen aScreens[];
+
+#endif

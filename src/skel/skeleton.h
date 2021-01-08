@@ -79,10 +79,7 @@ enum RsEvent
 	rsPADANALOGUERIGHTRESET,
 	rsPREINITCOMMANDLINE,
 	rsACTIVATE,
-	rsANIMVIEWER,
 };
-
-extern bool TurnOnAnimViewer;
 
 typedef enum RsEvent RsEvent;
 
@@ -273,6 +270,9 @@ RsCameraBeginUpdate(RwCamera *camera);
 //TODO
 //extern void                     
 //RsMouseSetVisibility(RwBool visible);
+
+extern RwImage*
+RsGrabScreen(RwCamera *camera);
 
 extern void                     
 RsMouseSetPos(RwV2d *pos);

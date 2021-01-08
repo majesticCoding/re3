@@ -17,13 +17,13 @@ public:
 	int8 forwardY;
 	int8 forwardZ;
 	int8 wheel;
-	uint8 gas;
-	uint8 brake;
+	int8 gas;
+	int8 brake;
 	bool handbrake;
 	CVector pos;
 };
 
-extern char gString[256];;
+extern char gString[256];
 
 class CRecordDataForChase
 {
@@ -57,9 +57,7 @@ public:
 	static void RestoreInfoForMatrix(CMatrix&, CCarStateEachFrame*);
 	static void RestoreInfoForCar(CAutomobile*, CCarStateEachFrame*, bool);
 	static void ProcessControlCars(void);
-#if (defined(GTA_PS2) || defined(FIX_BUGS))
 	static bool ShouldThisPadBeLeftAlone(uint8 pad);
-#endif
 	static void GiveUsACar(int32, CVector, float, CAutomobile**, uint8, uint8);
 	static void StartChaseScene(float);
 	static void CleanUpChaseScene(void);

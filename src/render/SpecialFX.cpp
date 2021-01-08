@@ -141,6 +141,9 @@ CSpecialFX::Render(void)
 	CBrightLights::Render();
 	CShinyTexts::Render();
 	CMoneyMessages::Render();
+#ifdef NEW_RENDERER
+	if(!(gbNewRenderer && FredIsInFirstPersonCam()))
+#endif
 	C3dMarkers::Render();
 }
 
@@ -204,7 +207,7 @@ CMotionBlurStreaks::Update(void)
 {
 	int i;
 	for(i = 0; i < NUMMBLURSTREAKS; i++)
-		if(aStreaks[i].m_id)
+		if(aStreaks[i].m_id != 0)
 			aStreaks[i].Update();
 }
 
@@ -225,7 +228,7 @@ CMotionBlurStreaks::RegisterStreak(uintptr id, uint8 r, uint8 g, uint8 b, CVecto
 		}
 	}
 	// Find free slot
-	for(i = 0; aStreaks[i].m_id; i++)
+	for(i = 0; aStreaks[i].m_id != 0; i++)
 		if(i == NUMMBLURSTREAKS-1)
 			return;
 	// Create a new streak
@@ -246,7 +249,7 @@ CMotionBlurStreaks::Render(void)
 	bool setRenderStates = false;
 	int i;
 	for(i = 0; i < NUMMBLURSTREAKS; i++)
-		if(aStreaks[i].m_id){
+		if(aStreaks[i].m_id != 0){
 			if(!setRenderStates){
 				RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 				RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
@@ -323,7 +326,7 @@ void CBulletTraces::Render(void)
 		RwIm3DVertexSetPos(&TraceVertices[4], sup.x + width.x, sup.y + width.y, sup.z + width.z);
 		RwIm3DVertexSetPos(&TraceVertices[5], sup.x - width.x, sup.y - width.y, sup.z - width.z);
 		LittleTest();
-		if (RwIm3DTransform(TraceVertices, ARRAY_SIZE(TraceVertices), nil, 1)) {
+		if (RwIm3DTransform(TraceVertices, ARRAY_SIZE(TraceVertices), nil, rwIM3D_VERTEXUV)) {
 			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TraceIndexList, ARRAY_SIZE(TraceIndexList));
 			RwIm3DEnd();
 		}
@@ -821,6 +824,22 @@ CBrightLights::Render(void)
 			TempBufferIndicesStored += 12*3;
 			break;
 
+		case BRIGHTLIGHT_FRONT_BIG:
+		case BRIGHTLIGHT_REAR_BIG:
+			for (j = 0; j < 8; j++) {
+			pos = BigCarHeadLightsSide[j] * aBrightLights[i].m_side +
+				BigCarHeadLightsUp[j] * aBrightLights[i].m_up +
+				BigCarHeadLightsFront[j] * aBrightLights[i].m_front +
+				aBrightLights[i].m_pos;
+			RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored + j], r, g, b, a);
+			RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored + j], pos.x, pos.y, pos.z);
+		}
+		for (j = 0; j < 12 * 3; j++)
+			TempBufferRenderIndexList[TempBufferIndicesStored + j] = CubeIndices[j] + TempBufferVerticesStored;
+		TempBufferVerticesStored += 8;
+		TempBufferIndicesStored += 12 * 3;
+		break;
+
 		case BRIGHTLIGHT_FRONT_TALL:
 		case BRIGHTLIGHT_REAR_TALL:
 			for(j = 0; j < 8; j++){
@@ -839,8 +858,8 @@ CBrightLights::Render(void)
 
 		case BRIGHTLIGHT_SIREN:
 			for(j = 0; j < 6; j++){
-				pos = SirenLightsSide[j]*aBrightLights[i].m_side +
-					SirenLightsUp[j]*aBrightLights[i].m_up +
+				pos = SirenLightsSide[j] * TheCamera.GetRight() +
+					SirenLightsUp[j] * TheCamera.GetUp() +
 					aBrightLights[i].m_pos;
 				RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored+j], r, g, b, a);
 				RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored+j], pos.x, pos.y, pos.z);
@@ -1032,18 +1051,19 @@ CMoneyMessage::Render()
 		RwV3d vecOut;
 		float fDistX, fDistY;
 		if (CSprite::CalcScreenCoors(m_vecPosition + CVector(0.0f, 0.0f, fLifeTime), &vecOut, &fDistX, &fDistY, true)) {
-			fDistX *= (0.7 * fLifeTime + 2.0) * m_fSize;
-			fDistY *= (0.7 * fLifeTime + 2.0) * m_fSize;
+			fDistX *= (0.7f * fLifeTime + 2.0f) * m_fSize;
+			fDistY *= (0.7f * fLifeTime + 2.0f) * m_fSize;
 			CFont::SetPropOn();
 			CFont::SetBackgroundOff();
 
-			float fScaleY = fDistY / 100.0f;
-			if (fScaleY > MAX_SCALE) fScaleY = MAX_SCALE;
+			float fScaleY = Min(fDistY / 100.0f, MAX_SCALE);
+			float fScaleX = Min(fDistX / 100.0f, MAX_SCALE);
 
-			float fScaleX = fDistX / 100.0f;
-			if (fScaleX > MAX_SCALE) fScaleX = MAX_SCALE;
-
-			CFont::SetScale(fScaleX, fScaleY); // maybe use SCREEN_SCALE_X and SCREEN_SCALE_Y here?
+#ifdef FIX_BUGS
+			CFont::SetScale(SCREEN_SCALE_X(fScaleX), SCREEN_SCALE_Y(fScaleY));
+#else
+			CFont::SetScale(fScaleX, fScaleY);
+#endif
 			CFont::SetCentreOn();
 			CFont::SetCentreSize(SCREEN_WIDTH);
 			CFont::SetJustifyOff();
@@ -1074,21 +1094,25 @@ CMoneyMessages::Render()
 void
 CMoneyMessages::RegisterOne(CVector vecPos, const char *pText, uint8 bRed, uint8 bGreen, uint8 bBlue, float fSize, float fOpacity)
 {
-	uint32 nIndex = 0;
-	while (aMoneyMessages[nIndex].m_nTimeRegistered != 0) {
-		if (++nIndex >= NUMMONEYMESSAGES) return;
+	uint32 i;
+#ifdef FIX_BUGS
+	for(i = 0; i < NUMMONEYMESSAGES && aMoneyMessages[i].m_nTimeRegistered != 0; i++);
+#else
+	for(i = 0; aMoneyMessages[i].m_nTimeRegistered != 0 && i < NUMMONEYMESSAGES; i++);
+#endif
+
+	if(i < NUMMONEYMESSAGES) {
+		// Add data of this money message to the array
+		AsciiToUnicode(pText, aMoneyMessages[i].m_aText);
+
+		aMoneyMessages[i].m_nTimeRegistered = CTimer::GetTimeInMilliseconds();
+		aMoneyMessages[i].m_vecPosition = vecPos;
+		aMoneyMessages[i].m_Colour.red = bRed;
+		aMoneyMessages[i].m_Colour.green = bGreen;
+		aMoneyMessages[i].m_Colour.blue = bBlue;
+		aMoneyMessages[i].m_fSize = fSize;
+		aMoneyMessages[i].m_fOpacity = fOpacity;
 	}
-
-	// Add data of this money message to the array
-	AsciiToUnicode(pText, aMoneyMessages[nIndex].m_aText);
-
-	aMoneyMessages[nIndex].m_nTimeRegistered = CTimer::GetTimeInMilliseconds();
-	aMoneyMessages[nIndex].m_vecPosition = vecPos;
-	aMoneyMessages[nIndex].m_Colour.red = bRed;
-	aMoneyMessages[nIndex].m_Colour.green = bGreen;
-	aMoneyMessages[nIndex].m_Colour.blue = bBlue;
-	aMoneyMessages[nIndex].m_fSize = fSize;
-	aMoneyMessages[nIndex].m_fOpacity = fOpacity;
 }
 
 CRGBA FoamColour(255, 255, 255, 255);

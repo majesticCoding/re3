@@ -32,6 +32,9 @@ enum e_ControllerAction
 	PED_JUMPING,
 	PED_SPRINT,
 	PED_LOOKBEHIND,
+#ifdef BIND_VEHICLE_FIREWEAPON
+	VEHICLE_FIREWEAPON,
+#endif
 	VEHICLE_ACCELERATE,
 	VEHICLE_BRAKE,
 	VEHICLE_CHANGE_RADIO_STATION,
@@ -184,6 +187,10 @@ public:
 	void DeleteMatchingVehicle_3rdPersonControls(e_ControllerAction action, int32 key, eControllerType type);
 	void DeleteMatching1rstPersonControls       (e_ControllerAction action, int32 key, eControllerType type);
 	void DeleteMatchingActionInitiators         (e_ControllerAction action, int32 key, eControllerType type);
+
+#ifdef RADIO_SCROLL_TO_PREV_STATION
+	bool IsAnyVehicleActionAssignedToMouseKey(int32 key);
+#endif 
 
 	bool GetIsKeyBlank(int32 key, eControllerType type);
 	e_ControllerActionType GetActionType(e_ControllerAction action);

@@ -1,4 +1,4 @@
-#include "common.h"
+﻿#include "common.h"
 
 #include "Glass.h"
 #include "Timer.h"
@@ -138,7 +138,11 @@ CFallingGlassPane::Render(void)
 	fwdNorm.Normalise();
 	uint8 alpha = CGlass::CalcAlphaWithNormal(&fwdNorm);
 
-	int32 time = clamp(CTimer::GetTimeInMilliseconds() - m_nTimer, 0, 500);
+#ifdef FIX_BUGS
+	uint16 time = clamp(CTimer::GetTimeInMilliseconds() > m_nTimer ? CTimer::GetTimeInMilliseconds() - m_nTimer : 0u, 0u, 500u);
+#else
+	uint16 time = clamp(CTimer::GetTimeInMilliseconds() - m_nTimer, 0, 500);
+#endif
 
 	uint8 color = int32( float(alpha) * (float(time) / 500) );
 
@@ -393,9 +397,9 @@ void
 CGlass::AskForObjectToBeRenderedInGlass(CEntity *entity)
 {
 #ifdef FIX_BUGS
-	if ( NumGlassEntities < NUM_GLASSPANES )
+	if ( NumGlassEntities < NUM_GLASSENTITIES )
 #else
-	if ( NumGlassEntities < NUM_GLASSPANES-1 )
+	if ( NumGlassEntities < NUM_GLASSENTITIES-1 )
 #endif
 	{
 		apEntitiesToBeRendered[NumGlassEntities++] = entity;
@@ -424,10 +428,10 @@ CGlass::RenderEntityInGlass(CEntity *entity)
 	ASSERT(col!=nil);
 	if ( col->numTriangles >= 2 )
 	{
-		CVector a = object->GetMatrix() * col->vertices[0];
-		CVector b = object->GetMatrix() * col->vertices[1];
-		CVector c = object->GetMatrix() * col->vertices[2];
-		CVector d = object->GetMatrix() * col->vertices[3];
+		CVector a = object->GetMatrix() * col->vertices[0].Get();
+		CVector b = object->GetMatrix() * col->vertices[1].Get();
+		CVector c = object->GetMatrix() * col->vertices[2].Get();
+		CVector d = object->GetMatrix() * col->vertices[3].Get();
 
 		if ( object->bGlassCracked )
 		{
@@ -613,10 +617,10 @@ CGlass::WindowRespondsToCollision(CEntity *entity, float amount, CVector speed, 
 	CColModel *col = object->GetColModel();
 	ASSERT(col!=nil);
 	
-	CVector a = object->GetMatrix() * col->vertices[0];
-	CVector b = object->GetMatrix() * col->vertices[1];
-	CVector c = object->GetMatrix() * col->vertices[2];
-	CVector d = object->GetMatrix() * col->vertices[3];
+	CVector a = object->GetMatrix() * col->vertices[0].Get();
+	CVector b = object->GetMatrix() * col->vertices[1].Get();
+	CVector c = object->GetMatrix() * col->vertices[2].Get();
+	CVector d = object->GetMatrix() * col->vertices[3].Get();
 
 	float minx = Min(Min(a.x, b.x), Min(c.x, d.x));
 	float maxx = Max(Max(a.x, b.x), Max(c.x, d.x));
@@ -700,7 +704,7 @@ CGlass::WindowRespondsToExplosion(CEntity *entity, CVector point)
 
 	if ( fDistToGlass < 10.0f )
 	{
-		distToGlass.Normalise(0.3f);
+		distToGlass *= (0.3f / fDistToGlass); // normalise
 		WindowRespondsToCollision(object, 10000.0f, distToGlass, object->GetPosition(), true);
 	}
 	else

@@ -5,13 +5,15 @@
 #include "Crime.h"
 #include "EventList.h"
 #include "PedIK.h"
-#include "PedStats.h"
+#include "PedType.h"
 #include "Physical.h"
 #include "Weapon.h"
 #include "WeaponInfo.h"
 
 #define FEET_OFFSET	1.04f
 #define CHECK_NEARBY_THINGS_MAX_DIST	15.0f
+#define ENTER_CAR_MAX_DIST	30.0f
+#define CAN_SEE_ENTITY_ANGLE_THRESHOLD	DEGTORAD(60.0f)
 
 struct CPathNode;
 class CAccident;
@@ -41,7 +43,7 @@ enum eFormation
 	FORMATION_FRONT
 };
 
-enum FightState : int8 {
+enum FightState {
 	FIGHTSTATE_MOVE_FINISHED = -2,
 	FIGHTSTATE_JUST_ATTACKED,
 	FIGHTSTATE_NO_MOVE,
@@ -151,36 +153,36 @@ enum eWaitState {
 	WAITSTATE_FINISH_FLEE
 };
 
-enum eObjective : uint32 {
+enum eObjective {
 	OBJECTIVE_NONE,
-	OBJECTIVE_IDLE,
-	OBJECTIVE_FLEE_TILL_SAFE,
+	OBJECTIVE_WAIT_ON_FOOT,
+	OBJECTIVE_FLEE_ON_FOOT_TILL_SAFE,
 	OBJECTIVE_GUARD_SPOT,
 	OBJECTIVE_GUARD_AREA,	// not implemented
 	OBJECTIVE_WAIT_IN_CAR,
-	OBJECTIVE_WAIT_IN_CAR_THEN_GETOUT,
+	OBJECTIVE_WAIT_IN_CAR_THEN_GET_OUT,
 	OBJECTIVE_KILL_CHAR_ON_FOOT,
 	OBJECTIVE_KILL_CHAR_ANY_MEANS,
 	OBJECTIVE_FLEE_CHAR_ON_FOOT_TILL_SAFE,
 	OBJECTIVE_FLEE_CHAR_ON_FOOT_ALWAYS,
 	OBJECTIVE_GOTO_CHAR_ON_FOOT,
-	OBJECTIVE_FOLLOW_PED_IN_FORMATION,
-	OBJECTIVE_LEAVE_VEHICLE,
+	OBJECTIVE_FOLLOW_CHAR_IN_FORMATION,
+	OBJECTIVE_LEAVE_CAR,
 	OBJECTIVE_ENTER_CAR_AS_PASSENGER,
 	OBJECTIVE_ENTER_CAR_AS_DRIVER,
-	OBJECTIVE_FOLLOW_CAR_IN_CAR, // seems not implemented so far
-	OBJECTIVE_FIRE_AT_OBJ_FROM_VEHICLE,	// not implemented
-	OBJECTIVE_DESTROY_OBJ,	// not implemented
+	OBJECTIVE_FOLLOW_CAR_IN_CAR, // not implemented
+	OBJECTIVE_FIRE_AT_OBJECT_FROM_VEHICLE,	// not implemented
+	OBJECTIVE_DESTROY_OBJECT,	// not implemented
 	OBJECTIVE_DESTROY_CAR,
 	OBJECTIVE_GOTO_AREA_ANY_MEANS,
 	OBJECTIVE_GOTO_AREA_ON_FOOT,
 	OBJECTIVE_RUN_TO_AREA,
-	OBJECTIVE_23,	// not implemented
-	OBJECTIVE_24,	// not implemented
-	OBJECTIVE_FIGHT_CHAR,
+	OBJECTIVE_GOTO_AREA_IN_CAR,	// not implemented
+	OBJECTIVE_FOLLOW_CAR_ON_FOOT_WITH_OFFSET,	// not implemented
+	OBJECTIVE_GUARD_ATTACK,
 	OBJECTIVE_SET_LEADER,
 	OBJECTIVE_FOLLOW_ROUTE,
-	OBJECTIVE_SOLICIT,
+	OBJECTIVE_SOLICIT_VEHICLE,
 	OBJECTIVE_HAIL_TAXI,
 	OBJECTIVE_CATCH_TRAIN,
 	OBJECTIVE_BUY_ICE_CREAM,
@@ -210,7 +212,7 @@ enum PedOnGroundState {
 	PED_DEAD_ON_THE_FLOOR
 };
 
-enum PointBlankNecessity : uint8 {
+enum PointBlankNecessity {
 	NO_POINT_BLANK_PED,
 	POINT_BLANK_FOR_WANTED_PED,
 	POINT_BLANK_FOR_SOMEONE_ELSE
@@ -385,9 +387,8 @@ public:
 #ifdef PED_SKIN
 	uint32 bDontAcceptIKLookAts : 1;	// TODO: find uses of this
 #endif
-	// our own flags
-	uint32 m_ped_flagI40 : 1; // bMakePedsRunToPhonesToReportCrimes makes use of this as runover by car indicator
-	uint32 m_ped_flagI80 : 1; // KANGAROO_CHEAT define makes use of this as cheat toggle 
+	uint32 m_ped_flagI40 : 1;
+	uint32 m_ped_flagI80 : 1; // originally unused, KANGAROO_CHEAT define makes use of this as cheat toggle 
 
 	uint8 CharCreatedBy;
 	eObjective m_objective;
@@ -454,6 +455,10 @@ public:
 	float m_distanceToCountSeekDone;
 	bool bRunningToPhone;
 	int16 m_phoneId;
+#ifdef PEDS_REPORT_CRIMES_ON_PHONE
+	bool m_facePhoneStart;
+	CEntity *m_victimOfPlayerCrime;
+#endif
 	eCrimeType m_crimeToReportOnPhone;
 	uint32 m_phoneTalkTimer;
 	CAccident *m_lastAccident;
@@ -477,9 +482,9 @@ public:
 	uint8 m_wepAccuracy;
 	CEntity *m_pPointGunAt;
 	CVector m_vecHitLastPos;
-	uint32 m_lastFightMove;
+	uint32 m_curFightMove;
 	uint8 m_fightButtonPressure;
-	FightState m_fightState;
+	int8 m_fightState;
 	bool m_takeAStepAfterAttack;
 	CFire *m_pFire;
 	CEntity *m_pLookTarget;
@@ -564,7 +569,7 @@ public:
 	void CalculateNewOrientation(void);
 	float WorkOutHeadingForMovingFirstPerson(float);
 	void CalculateNewVelocity(void);
-	bool CanSeeEntity(CEntity*, float);
+	bool CanSeeEntity(CEntity*, float threshold = CAN_SEE_ENTITY_ANGLE_THRESHOLD);
 	void RestorePreviousObjective(void);
 	void SetIdle(void);
 #ifdef _MSC_VER
@@ -588,9 +593,12 @@ public:
 	bool MakePhonecall(void);
 	bool FacePhone(void);
 	CPed *CheckForDeadPeds(void);
+#ifdef PEDS_REPORT_CRIMES_ON_PHONE
+	int32 CheckForPlayerCrimes(CPed *victim = nil);
+#endif
 	bool CheckForExplosions(CVector2D &area);
 	CPed *CheckForGunShots(void);
-	PointBlankNecessity CheckForPointBlankPeds(CPed*);
+	uint8 CheckForPointBlankPeds(CPed*);
 	bool CheckIfInTheAir(void);
 	void ClearAll(void);
 	void SetPointGunAt(CEntity*);
@@ -740,7 +748,7 @@ public:
 	static void PedSetQuickDraggedOutCarPositionCB(CAnimBlendAssociation *assoc, void *arg);
 	static void PedSetDraggedOutCarPositionCB(CAnimBlendAssociation *assoc, void *arg);
 
-	bool IsPlayer(void);
+	bool IsPlayer(void) const;
 	bool UseGroundColModel(void);
 	bool CanSetPedState(void);
 	bool IsPedInControl(void);
@@ -758,7 +766,7 @@ public:
 	void SetStoredObjective(void);
 	void SetLeader(CEntity* leader);
 	void SetPedStats(ePedStats);
-	bool IsGangMember(void);
+	bool IsGangMember(void) const;
 	void Die(void);
 	void EnterTrain(void);
 	void ExitTrain(void);
@@ -781,7 +789,7 @@ public:
 	CObject *SpawnFlyingComponent(int, int8);
 	void SetCarJack_AllClear(CVehicle*, uint32, uint32);
 #ifdef VC_PED_PORTS
-	bool CanPedJumpThis(CEntity*, CVector*);
+	bool CanPedJumpThis(CEntity *unused, CVector *damageNormal = nil);
 #else
 	bool CanPedJumpThis(CEntity*);
 #endif
@@ -796,14 +804,46 @@ public:
 	bool Dying(void) { return m_nPedState == PED_DIE; }
 	bool DyingOrDead(void) { return m_nPedState == PED_DIE || m_nPedState == PED_DEAD; }
 	bool OnGround(void) { return m_nPedState == PED_FALL || m_nPedState == PED_DIE || m_nPedState == PED_DEAD; }
+	bool OnGroundOrGettingUp(void) { return OnGround() || m_nPedState == PED_GETUP; }
 	
 	bool Driving(void) { return m_nPedState == PED_DRIVING; }
 	bool InVehicle(void) { return bInVehicle && m_pMyVehicle; } // True when ped is sitting/standing in vehicle, not in enter/exit state.
 	bool EnteringCar(void) { return m_nPedState == PED_ENTER_CAR || m_nPedState == PED_CARJACK; }
 
-	void ReplaceWeaponWhenExitingVehicle(void);
-	void RemoveWeaponWhenEnteringVehicle(void);
-	bool IsNotInWreckedVehicle();
+	// It was inlined in III but not in VC.
+	inline void
+	ReplaceWeaponWhenExitingVehicle(void)
+	{
+		eWeaponType weaponType = GetWeapon()->m_eWeaponType;
+
+		// If it's Uzi, we may have stored weapon. Uzi is the only gun we can use in car.
+		if (IsPlayer() && weaponType == WEAPONTYPE_UZI) {
+			if (/*IsPlayer() && */ m_storedWeapon != WEAPONTYPE_UNIDENTIFIED) {
+				SetCurrentWeapon(m_storedWeapon);
+				m_storedWeapon = WEAPONTYPE_UNIDENTIFIED;
+			}
+		} else {
+			AddWeaponModel(CWeaponInfo::GetWeaponInfo(weaponType)->m_nModelId);
+		}
+	}
+
+	// It was inlined in III but not in VC.
+	inline void
+	RemoveWeaponWhenEnteringVehicle(void)
+	{
+		if (IsPlayer() && HasWeapon(WEAPONTYPE_UZI) && GetWeapon(WEAPONTYPE_UZI).m_nAmmoTotal > 0) {
+			if (m_storedWeapon == WEAPONTYPE_UNIDENTIFIED)
+				m_storedWeapon = GetWeapon()->m_eWeaponType;
+			SetCurrentWeapon(WEAPONTYPE_UZI);
+		} else {
+			CWeaponInfo *ourWeapon = CWeaponInfo::GetWeaponInfo(GetWeapon()->m_eWeaponType);
+			RemoveWeaponModel(ourWeapon->m_nModelId);
+		}
+	}
+	bool IsNotInWreckedVehicle()
+	{
+		return m_pMyVehicle != nil && ((CEntity*)m_pMyVehicle)->GetStatus() != STATUS_WRECKED;
+	}
 	// My additions, because there were many, many instances of that.
 	inline void SetFindPathAndFlee(CEntity *fleeFrom, int time, bool walk = false)
 	{
@@ -821,6 +861,13 @@ public:
 		m_pNextPathNode = nil;
 		if (walk)
 			SetMoveState(PEDMOVE_WALK);
+	}
+
+	inline void SetWeaponLockOnTarget(CEntity *target)
+	{
+		m_pPointGunAt = (CPed *)target;
+		if(target)
+			((CEntity *)target)->RegisterReference(&m_pPointGunAt);
 	}
 
 	// Using this to abstract nodes of skinned and non-skinned meshes
@@ -851,13 +898,13 @@ public:
 			RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
 			int32 idx = RpHAnimIDGetIndex(hier, m_pFrames[node]->nodeID);
 			RwMatrix *mats = RpHAnimHierarchyGetMatrixArray(hier);
-			RwV3dTransformPoints((RwV3d*)&pos, (RwV3d*)&pos, 1, &mats[idx]);
+			RwV3dTransformPoints(&pos, &pos, 1, &mats[idx]);
 		}else
 #endif
 		{
 			RwFrame *frame;
 			for (frame = m_pFrames[node]->frame; frame; frame = RwFrameGetParent(frame))
-				RwV3dTransformPoints((RwV3d*)&pos, (RwV3d*)&pos, 1, RwFrameGetMatrix(frame));
+				RwV3dTransformPoints(&pos, &pos, 1, RwFrameGetMatrix(frame));
 		}
 	}
 
@@ -872,9 +919,8 @@ public:
 	static bool bPedCheat3;
 	static CVector2D ms_vec2DFleePosition;
 
-#ifdef TOGGLEABLE_BETA_FEATURES
+#ifdef DEBUGMENU
 	static bool bPopHeadsOnHeadshot;
-	static bool bMakePedsRunToPhonesToReportCrimes;
 #endif
 
 #ifndef MASTER

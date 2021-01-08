@@ -26,6 +26,7 @@ public:
 	void PlayOneShot(int32 audioEntity, uint16 oneShot, float volume);
 	void DestroyAllGameCreatedEntities(void);
 	
+	void SetMonoMode(uint8 mono);
 	void SetEffectsMasterVolume(uint8 volume);
 	void SetMusicMasterVolume(uint8 volume);
 	void SetEffectsFadeVol(uint8 volume);
@@ -33,8 +34,6 @@ public:
 	
 	uint8 GetNum3DProvidersAvailable(void);
 	char *Get3DProviderName(uint8 id);
-	
-	int8 AutoDetect3DProviders(void);
 	
 	int8 GetCurrent3DProviderIndex(void);
 	int8 SetCurrent3DProvider(uint8 which);
@@ -85,6 +84,6 @@ public:
 
 	uint8 GetRadioInCar(void);
 	void SetRadioInCar(uint32 radio);
-	void SetRadioChannel(int8 radio, int32 pos);
+	void SetRadioChannel(uint8 radio, int32 pos);
 };
 extern cDMAudio DMAudio;

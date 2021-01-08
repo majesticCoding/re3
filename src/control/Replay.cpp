@@ -1,5 +1,5 @@
 #include "common.h"
-
+#ifdef GTA_REPLAY
 #include "AnimBlendAssociation.h"
 #include "Boat.h"
 #include "SpecialFX.h"
@@ -10,6 +10,10 @@
 #include "DMAudio.h"
 #include "Draw.h"
 #include "FileMgr.h"
+#ifdef FIX_BUGS
+#include "Fire.h"
+#include "Garages.h"
+#endif
 #include "Heli.h"
 #include "main.h"
 #include "Matrix.h"
@@ -22,6 +26,10 @@
 #include "Plane.h"
 #include "Pools.h"
 #include "Population.h"
+#ifdef FIX_BUGS
+#include "Projectile.h"
+#include "ProjectileInfo.h"
+#endif
 #include "Replay.h"
 #include "References.h"
 #include "Pools.h"
@@ -102,6 +110,11 @@ float CReplay::fDistanceLookAroundCam;
 float CReplay::fBetaAngleLookAroundCam;
 float CReplay::fAlphaAngleLookAroundCam;
 #ifdef FIX_BUGS
+uint8* CReplay::pGarages;
+CFire* CReplay::FireArray;
+uint32 CReplay::NumOfFires;
+uint8* CReplay::paProjectileInfo;
+uint8* CReplay::paProjectiles;
 int CReplay::nHandleOfPlayerPed[NUMPLAYERS];
 #endif
 
@@ -164,7 +177,7 @@ static void ApplyPanelDamageToCar(uint32 panels, CAutomobile* vehicle, bool flyi
 
 void PrintElementsInPtrList(void) 
 {
-	for (CPtrNode* node = CWorld::GetBigBuildingList(LEVEL_NONE).first; node; node = node->next) {
+	for (CPtrNode* node = CWorld::GetBigBuildingList(LEVEL_GENERIC).first; node; node = node->next) {
 		/* Most likely debug print was present here */
 	}
 }
@@ -744,7 +757,7 @@ void CReplay::ProcessCarUpdate(CVehicle *vehicle, float interpolation, CAddressI
 			car->Damage.SetDoorStatus(DOOR_FRONT_LEFT, DOOR_STATUS_SWINGING);
 		if (vp->door_angles[1])
 			car->Damage.SetDoorStatus(DOOR_FRONT_RIGHT, DOOR_STATUS_SWINGING);
-		if (vp->door_status & 1 && car->Damage.GetDoorStatus(DOOR_BONNET) != DOOR_STATUS_MISSING){
+		if (vp->door_status & 1 && car->Damage.GetDoorStatus(DOOR_BONNET) != DOOR_STATUS_MISSING) {
 			car->Damage.SetDoorStatus(DOOR_BONNET, DOOR_STATUS_MISSING);
 			car->SetDoorDamage(CAR_BONNET, DOOR_BONNET, true);
 		}
@@ -768,14 +781,14 @@ void CReplay::ProcessCarUpdate(CVehicle *vehicle, float interpolation, CAddressI
 			car->Damage.SetDoorStatus(DOOR_REAR_RIGHT, DOOR_STATUS_MISSING);
 			car->SetDoorDamage(CAR_DOOR_RR, DOOR_REAR_RIGHT, true);
 		}
-		vehicle->bEngineOn = true;
-		if (vehicle->IsCar())
-			((CAutomobile*)vehicle)->m_nDriveWheelsOnGround = 4;
-		CWorld::Remove(vehicle);
-		CWorld::Add(vehicle);
-		if (vehicle->IsBoat())
-			((CBoat*)vehicle)->m_bIsAnchored = false;
 	}
+	vehicle->bEngineOn = true;
+	if (vehicle->IsCar())
+		((CAutomobile*)vehicle)->m_nDriveWheelsOnGround = 4;
+	CWorld::Remove(vehicle);
+	CWorld::Add(vehicle);
+	if (vehicle->IsBoat())
+		((CBoat*)vehicle)->m_bIsAnchored = false;
 }
 
 bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, float interpolation, uint32 *pTimer){
@@ -1025,10 +1038,10 @@ void CReplay::ProcessReplayCamera(void)
 		TheCamera.GetUp() = CVector(0.0f, 1.0f, 0.0f);
 		TheCamera.GetRight() = CVector(1.0f, 0.0f, 0.0f);
 		RwMatrix* pm = RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera));
-		pm->pos = *(RwV3d*)&TheCamera.GetPosition();
-		pm->at = *(RwV3d*)&TheCamera.GetForward();
-		pm->up = *(RwV3d*)&TheCamera.GetUp();
-		pm->right = *(RwV3d*)&TheCamera.GetRight();
+		pm->pos = TheCamera.GetPosition();
+		pm->at = TheCamera.GetForward();
+		pm->up = TheCamera.GetUp();
+		pm->right = TheCamera.GetRight();
 		break;
 	}
 	case REPLAYCAMMODE_FIXED:
@@ -1044,10 +1057,10 @@ void CReplay::ProcessReplayCamera(void)
 		TheCamera.GetMatrix().GetUp() = up;
 		TheCamera.GetMatrix().GetRight() = right;
 		RwMatrix* pm = RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera));
-		pm->pos = *(RwV3d*)&TheCamera.GetMatrix().GetPosition();
-		pm->at = *(RwV3d*)&TheCamera.GetMatrix().GetForward();
-		pm->up = *(RwV3d*)&TheCamera.GetMatrix().GetUp();
-		pm->right = *(RwV3d*)&TheCamera.GetMatrix().GetRight();
+		pm->pos = TheCamera.GetMatrix().GetPosition();
+		pm->at = TheCamera.GetMatrix().GetForward();
+		pm->up = TheCamera.GetMatrix().GetUp();
+		pm->right = TheCamera.GetMatrix().GetRight();
 		break;
 	}
 	default:
@@ -1124,7 +1137,7 @@ void CReplay::StoreStuffInMem(void)
 	pWorld1 = new uint8[sizeof(CSector) * NUMSECTORS_X * NUMSECTORS_Y];
 	memcpy(pWorld1, CWorld::GetSector(0, 0), NUMSECTORS_X * NUMSECTORS_Y * sizeof(CSector));
 	WorldPtrList = CWorld::GetMovingEntityList().first; // why
-	BigBuildingPtrList = CWorld::GetBigBuildingList(LEVEL_NONE).first;
+	BigBuildingPtrList = CWorld::GetBigBuildingList(LEVEL_GENERIC).first;
 	pPickups = new uint8[sizeof(CPickup) * NUMPICKUPS];
 	memcpy(pPickups, CPickups::aPickUps, NUMPICKUPS * sizeof(CPickup));
 	pReferences = new uint8[(sizeof(CReference) * NUMREFERENCES)];
@@ -1156,6 +1169,17 @@ void CReplay::StoreStuffInMem(void)
 		if (ped)
 			StoreDetailedPedAnimation(ped, &pPedAnims[i]);
 	}
+#ifdef FIX_BUGS
+	pGarages = new uint8[sizeof(CGarages::aGarages)];
+	memcpy(pGarages, CGarages::aGarages, sizeof(CGarages::aGarages));
+	FireArray = new CFire[NUM_FIRES];
+	memcpy(FireArray, gFireManager.m_aFires, sizeof(gFireManager.m_aFires));
+	NumOfFires = gFireManager.m_nTotalFires;
+	paProjectileInfo = new uint8[sizeof(gaProjectileInfo)];
+	memcpy(paProjectileInfo, gaProjectileInfo, sizeof(gaProjectileInfo));
+	paProjectiles = new uint8[sizeof(CProjectileInfo::ms_apProjectile)];
+	memcpy(paProjectiles, CProjectileInfo::ms_apProjectile, sizeof(CProjectileInfo::ms_apProjectile));
+#endif
 }
 
 void CReplay::RestoreStuffFromMem(void)
@@ -1170,7 +1194,7 @@ void CReplay::RestoreStuffFromMem(void)
 	delete[] pWorld1;
 	pWorld1 = nil;
 	CWorld::GetMovingEntityList().first = WorldPtrList;
-	CWorld::GetBigBuildingList(LEVEL_NONE).first = BigBuildingPtrList;
+	CWorld::GetBigBuildingList(LEVEL_GENERIC).first = BigBuildingPtrList;
 	memcpy(CPickups::aPickUps, pPickups, sizeof(CPickup) * NUMPICKUPS);
 	delete[] pPickups;
 	pPickups = nil;
@@ -1206,7 +1230,7 @@ void CReplay::RestoreStuffFromMem(void)
 		ped->m_rwObject = nil;
 		ped->m_modelIndex = -1;
 		ped->SetModelIndex(mi);
-		ped->m_pVehicleAnim = 0;
+		ped->m_pVehicleAnim = nil;
 		ped->m_audioEntityId = DMAudio.CreateEntity(AUDIOTYPE_PHYSICAL, ped);
 		DMAudio.SetEntityStatus(ped->m_audioEntityId, true);
 		CPopulation::UpdatePedCount((ePedType)ped->m_nPedType, false);
@@ -1322,6 +1346,22 @@ void CReplay::RestoreStuffFromMem(void)
 	}
 	delete[] pPedAnims;
 	pPedAnims = nil;
+#ifdef FIX_BUGS
+	memcpy(CGarages::aGarages, pGarages, sizeof(CGarages::aGarages));
+	delete[] pGarages;
+	pGarages = nil;
+	memcpy(gFireManager.m_aFires, FireArray, sizeof(gFireManager.m_aFires));
+	delete[] FireArray;
+	FireArray = nil;
+	gFireManager.m_nTotalFires = NumOfFires;
+	memcpy(gaProjectileInfo, paProjectileInfo, sizeof(gaProjectileInfo));
+	delete[] paProjectileInfo;
+	paProjectileInfo = nil;
+	memcpy(CProjectileInfo::ms_apProjectile, paProjectiles, sizeof(CProjectileInfo::ms_apProjectile));
+	delete[] paProjectiles;
+	paProjectiles = nil;
+	//CExplosion::ClearAllExplosions(); not in III
+#endif
 	DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
 	DMAudio.SetRadioInCar(OldRadioStation);
 	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
@@ -1454,7 +1494,7 @@ void CReplay::StreamAllNecessaryCarsAndPeds(void)
 	for (int slot = 0; slot < NUM_REPLAYBUFFERS; slot++) {
 		if (BufferStatus[slot] == REPLAYBUFFER_UNUSED)
 			continue;
-		for (int offset = 0; Buffers[slot][offset] != REPLAYPACKET_END; offset += FindSizeOfPacket(Buffers[slot][offset])) {
+		for (size_t offset = 0; Buffers[slot][offset] != REPLAYPACKET_END; offset += FindSizeOfPacket(Buffers[slot][offset])) {
 			switch (Buffers[slot][offset]) {
 			case REPLAYPACKET_VEHICLE:
 				CStreaming::RequestModel(((tVehicleUpdatePacket*)&Buffers[slot][offset])->mi, 0);
@@ -1476,7 +1516,7 @@ void CReplay::FindFirstFocusCoordinate(CVector *coord)
 	for (int slot = 0; slot < NUM_REPLAYBUFFERS; slot++) {
 		if (BufferStatus[slot] == REPLAYBUFFER_UNUSED)
 			continue;
-		for (int offset = 0; Buffers[slot][offset] != REPLAYPACKET_END; offset += FindSizeOfPacket(Buffers[slot][offset])) {
+		for (size_t offset = 0; Buffers[slot][offset] != REPLAYPACKET_END; offset += FindSizeOfPacket(Buffers[slot][offset])) {
 			if (Buffers[slot][offset] == REPLAYPACKET_GENERAL) {
 				*coord = ((tGeneralPacket*)&Buffers[slot][offset])->player_pos;
 				return;
@@ -1541,10 +1581,10 @@ void CReplay::ProcessLookAroundCam(void)
 	TheCamera.GetRight() = right;
 	TheCamera.SetPosition(camera_pt);
 	RwMatrix* pm = RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera));
-	pm->pos = *(RwV3d*)&TheCamera.GetPosition();
-	pm->at = *(RwV3d*)&TheCamera.GetForward();
-	pm->up = *(RwV3d*)&TheCamera.GetUp();
-	pm->right = *(RwV3d*)&TheCamera.GetRight();
+	pm->pos = TheCamera.GetPosition();
+	pm->at = TheCamera.GetForward();
+	pm->up = TheCamera.GetUp();
+	pm->right = TheCamera.GetRight();
 	TheCamera.CalculateDerivedValues();
 	RwMatrixUpdate(RwFrameGetMatrix(RwCameraGetFrame(TheCamera.m_pRwCamera)));
 	RwFrameUpdateObjects(RwCameraGetFrame(TheCamera.m_pRwCamera));
@@ -1576,12 +1616,20 @@ void CReplay::Display()
 	TimeCount = (TimeCount + 1) % UINT16_MAX;
 	if ((TimeCount & 0x20) == 0)
 		return;
-	CFont::SetPropOn();
-	CFont::SetBackgroundOff();
+	
 	CFont::SetScale(SCREEN_SCALE_X(1.5f), SCREEN_SCALE_Y(1.5f));
-	CFont::SetAlignment(ALIGN_LEFT);
+	CFont::SetJustifyOff();
+	CFont::SetBackgroundOff();
+#ifdef FIX_BUGS
+	CFont::SetCentreSize(SCREEN_SCALE_X(DEFAULT_SCREEN_WIDTH-20));
+#else
+	CFont::SetCentreSize(SCREEN_WIDTH-20);
+#endif
+	CFont::SetCentreOff();
+	CFont::SetPropOn();
 	CFont::SetColor(CRGBA(255, 255, 200, 200));
 	CFont::SetFontStyle(FONT_BANK);
 	if (Mode == MODE_PLAYBACK)
-		CFont::PrintString(SCREEN_SCALE_X(63.5f), SCREEN_SCALE_Y(30.0f), TheText.Get("REPLAY"));
+		CFont::PrintString(SCREEN_WIDTH/15, SCREEN_HEIGHT/10, TheText.Get("REPLAY"));
 }
+#endif

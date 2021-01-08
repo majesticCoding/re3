@@ -19,6 +19,7 @@
 #include "Fire.h"
 #include "Script.h"
 #include "Garages.h"
+#include "screendroplets.h"
 
 uint8 CGameLogic::ActivePlayers;
 
@@ -117,17 +118,20 @@ CGameLogic::Update()
 				}
 			}
 			CEventList::Initialise();
+#ifdef SCREEN_DROPLETS
+			ScreenDroplets::Initialise();
+#endif
 			CMessages::ClearMessages();
 			CCarCtrl::ClearInterestingVehicleList();
 			CWorld::ClearExcitingStuffFromArea(pPlayerInfo.GetPos(), 4000.0f, 1);
 			CRestart::FindClosestHospitalRestartPoint(pPlayerInfo.GetPos(), &vecRestartPos, &fRestartFloat);
-			CRestart::OverrideHospitalLevel = LEVEL_NONE;
-			CRestart::OverridePoliceStationLevel = LEVEL_NONE;
+			CRestart::OverrideHospitalLevel = LEVEL_GENERIC;
+			CRestart::OverridePoliceStationLevel = LEVEL_GENERIC;
 			PassTime(720);
 			RestorePlayerStuffDuringResurrection(pPlayerInfo.m_pPed, vecRestartPos, fRestartFloat);
 			SortOutStreamingAndMemory(pPlayerInfo.GetPos());
 			TheCamera.m_fCamShakeForce = 0.0f;
-			TheCamera.SetMotionBlur(0, 0, 0, 0, MBLUR_NONE);
+			TheCamera.SetMotionBlur(0, 0, 0, 0, MOTION_BLUR_NONE);
 			CPad::GetPad(0)->StopShaking(0);
 			CReferences::RemoveReferencesToPlayer();
 			CCarCtrl::CountDownToCarsAtStart = 2;
@@ -196,18 +200,21 @@ CGameLogic::Update()
 				}
 			}
 			CEventList::Initialise();
+#ifdef SCREEN_DROPLETS
+			ScreenDroplets::Initialise();
+#endif
 			CMessages::ClearMessages();
 			CCarCtrl::ClearInterestingVehicleList();
 			CWorld::ClearExcitingStuffFromArea(pPlayerInfo.GetPos(), 4000.0f, 1);
 			CRestart::FindClosestPoliceRestartPoint(pPlayerInfo.GetPos(), &vecRestartPos, &fRestartFloat);
-			CRestart::OverrideHospitalLevel = LEVEL_NONE;
-			CRestart::OverridePoliceStationLevel = LEVEL_NONE;
+			CRestart::OverrideHospitalLevel = LEVEL_GENERIC;
+			CRestart::OverridePoliceStationLevel = LEVEL_GENERIC;
 			PassTime(720);
 			RestorePlayerStuffDuringResurrection(pPlayerInfo.m_pPed, vecRestartPos, fRestartFloat);
 			pPlayerInfo.m_pPed->ClearWeapons();
 			SortOutStreamingAndMemory(pPlayerInfo.GetPos());
 			TheCamera.m_fCamShakeForce = 0.0f;
-			TheCamera.SetMotionBlur(0, 0, 0, 0, MBLUR_NONE);
+			TheCamera.SetMotionBlur(0, 0, 0, 0, MOTION_BLUR_NONE);
 			CPad::GetPad(0)->StopShaking(0);
 			CReferences::RemoveReferencesToPlayer();
 			CCarCtrl::CountDownToCarsAtStart = 2;
@@ -245,16 +252,19 @@ CGameLogic::Update()
 				}
 			}
 			CEventList::Initialise();
+#ifdef SCREEN_DROPLETS
+			ScreenDroplets::Initialise();
+#endif
 			CMessages::ClearMessages();
 			CCarCtrl::ClearInterestingVehicleList();
 			CWorld::ClearExcitingStuffFromArea(pPlayerInfo.GetPos(), 4000.0f, 1);
 			CRestart::FindClosestPoliceRestartPoint(pPlayerInfo.GetPos(), &vecRestartPos, &fRestartFloat);
-			CRestart::OverridePoliceStationLevel = LEVEL_NONE;
-			CRestart::OverrideHospitalLevel = LEVEL_NONE;
+			CRestart::OverridePoliceStationLevel = LEVEL_GENERIC;
+			CRestart::OverrideHospitalLevel = LEVEL_GENERIC;
 			RestorePlayerStuffDuringResurrection(pPlayerInfo.m_pPed, vecRestartPos, fRestartFloat);
 			SortOutStreamingAndMemory(pPlayerInfo.GetPos());
 			TheCamera.m_fCamShakeForce = 0.0f;
-			TheCamera.SetMotionBlur(0, 0, 0, 0, MBLUR_NONE);
+			TheCamera.SetMotionBlur(0, 0, 0, 0, MOTION_BLUR_NONE);
 			CPad::GetPad(0)->StopShaking(0);
 			CReferences::RemoveReferencesToPlayer();
 			CCarCtrl::CountDownToCarsAtStart = 2;

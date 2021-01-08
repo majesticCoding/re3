@@ -3,9 +3,11 @@
 #include "Draw.h"
 #include "Frontend.h"
 #include "Camera.h"
+#include "CutsceneMgr.h"
 
 #ifdef ASPECT_RATIO_SCALE
 float CDraw::ms_fAspectRatio = DEFAULT_ASPECT_RATIO;
+float CDraw::ms_fScaledFOV = 45.0f;
 #endif
 
 float CDraw::ms_fNearClipZ;
@@ -61,8 +63,21 @@ void
 CDraw::SetFOV(float fov)
 {
 #ifdef ASPECT_RATIO_SCALE
-	ms_fFOV = ConvertFOV(fov);
-#else
-	ms_fFOV = fov;
+	if (!CCutsceneMgr::IsRunning())
+		ms_fScaledFOV = ConvertFOV(fov);
+	else
+		ms_fScaledFOV = fov;
 #endif
+	ms_fFOV = fov;
 }
+
+#ifdef ASPECT_RATIO_SCALE
+float
+ScaleAndCenterX(float x)
+{
+	if (SCREEN_WIDTH == DEFAULT_SCREEN_WIDTH)
+		return x;
+	else
+		return (SCREEN_WIDTH - SCREEN_SCALE_X(DEFAULT_SCREEN_WIDTH)) / 2 + SCREEN_SCALE_X(x);
+}
+#endif

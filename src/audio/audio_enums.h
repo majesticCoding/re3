@@ -224,7 +224,7 @@ enum eStreamedSounds
 	STREAMED_SOUND_MISSION_K1_B,
 	STREAMED_SOUND_MISSION_CAT1,
 	TOTAL_STREAMED_SOUNDS,
-	NO_STREAMED_SOUND,
+	NO_TRACK,
 };
 
 enum AudioEntityHandle {
@@ -235,7 +235,7 @@ enum AudioEntityHandle {
 	AEHANDLE_ERROR_BADAUDIOTYPE = -1,
 };
 
-enum eAudioType : int32
+enum eAudioType
 {
 	AUDIOTYPE_PHYSICAL = 0,
 	AUDIOTYPE_EXPLOSION,

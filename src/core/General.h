@@ -108,7 +108,7 @@ public:
 		if (angle >= TWOPI)
 			angle -= TWOPI;
 
-		return (int)floorf(angle / DEGTORAD(45.0f));
+		return (int)Floor(angle / DEGTORAD(45.0f));
 	}
 
 	// Unlike usual string comparison functions, these don't care about greater or lesser
@@ -119,6 +119,15 @@ public:
 				return true;
 		}
 		return *str2 != '\0';
+	}
+
+	static bool faststrncmp(const char *str1, const char *str2, uint32 count)
+	{
+		for(uint32 i = 0; *str1 && i < count; str1++, str2++, i++) {
+			if (*str1 != *str2)
+				return true;
+		}
+		return false;
 	}
 
 	static bool faststricmp(const char *str1, const char *str2)

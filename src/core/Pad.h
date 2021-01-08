@@ -2,14 +2,14 @@
 
 enum {
 	PLAYERCONTROL_ENABLED = 0,
-	PLAYERCONTROL_DISABLED_1 = 1,	// used by first person camera
-	PLAYERCONTROL_DISABLED_2 = 2,
+	PLAYERCONTROL_CAMERA = 1,
+	PLAYERCONTROL_UNK2 = 2,
 	PLAYERCONTROL_GARAGE = 4,
-	PLAYERCONTROL_DISABLED_8 = 8,
-	PLAYERCONTROL_DISABLED_10 = 16,
-	PLAYERCONTROL_DISABLED_20 = 32, // used on CPlayerInfo::MakePlayerSafe
-	PLAYERCONTROL_DISABLED_40 = 64, // used on phone calls
-	PLAYERCONTROL_DISABLED_80 = 128,// used on cutscenes
+	PLAYERCONTROL_UNK8 = 8,
+	PLAYERCONTROL_UNK10 = 16,
+	PLAYERCONTROL_PLAYERINFO = 32,
+	PLAYERCONTROL_PHONE = 64,
+	PLAYERCONTROL_CUTSCENE = 128,
 };
 
 class CControllerState
@@ -29,9 +29,7 @@ public:
 	float GetRightStickX(void) { return RightStickX/32767.0f; };
 	float GetRightStickY(void) { return RightStickY/32767.0f; };
 
-#ifdef DETECT_PAD_INPUT_SWITCH
-	bool IsAnyButtonPressed();
-#endif
+	bool CheckForInput();
 	void Clear(void);
 };
 VALIDATE_SIZE(CControllerState, 0x2A);
@@ -172,6 +170,9 @@ public:
 	static bool bObsoleteControllerMessage;
 	static bool bOldDisplayNoControllerMessage;
 	static bool m_bMapPadOneToPadTwo;
+#ifdef INVERT_LOOK_FOR_PAD
+	static bool bInvertLook4Pad;
+#endif
 	
 	static CKeyboardState OldKeyState;
 	static CKeyboardState NewKeyState;
@@ -199,13 +200,13 @@ public:
 
 	static void UpdatePads(void);
 	void ProcessPCSpecificStuff(void);
-	void Update(int16 unk);
+	void Update(int16 pad);
 	
 	static void DoCheats(void);
 	void DoCheats(int16 unk);
 	
 	static void StopPadsShaking(void);
-	void StopShaking(int16 unk);
+	void StopShaking(int16 pad);
 	
 	static CPad *GetPad(int32 pad);
 	
@@ -279,6 +280,8 @@ public:
 	bool GetMiddleMouseJustUp() { return !!(!NewMouseControllerState.MMB && OldMouseControllerState.MMB); }
 	bool GetMouseWheelUpJustUp() { return !!(!NewMouseControllerState.WHEELUP && OldMouseControllerState.WHEELUP); }
 	bool GetMouseWheelDownJustUp() { return !!(!NewMouseControllerState.WHEELDN && OldMouseControllerState.WHEELDN); }
+	bool GetMouseX1JustUp() { return !!(!NewMouseControllerState.MXB1 && OldMouseControllerState.MXB1); }
+	bool GetMouseX2JustUp() { return !!(!NewMouseControllerState.MXB2 && OldMouseControllerState.MXB2); }
 
 	bool GetLeftMouse()         { return NewMouseControllerState.LMB; }
 	bool GetRightMouse()        { return NewMouseControllerState.RMB; }
@@ -444,6 +447,7 @@ public:
 	bool GetLeftShoulder2(void)  { return !!NewState.LeftShoulder2; }
 	bool GetRightShoulder1(void) { return !!NewState.RightShoulder1; }
 	bool GetRightShoulder2(void) { return !!NewState.RightShoulder2; }
+	bool GetStart()              { return !!NewState.Start; }
 	int16 GetLeftStickX(void)    { return NewState.LeftStickX; }
 	int16 GetLeftStickY(void)    { return NewState.LeftStickY; }
 	int16 GetRightStickX(void)    { return NewState.RightStickX; }
@@ -453,6 +457,11 @@ public:
 	void SetDisablePlayerControls(uint8 who) { DisablePlayerControls |= who; }
 	void SetEnablePlayerControls(uint8 who) { DisablePlayerControls &= ~who; }
 	bool IsPlayerControlsDisabledBy(uint8 who) { return DisablePlayerControls & who; }
+	
+	int16 GetMode() { return Mode; }
+	void SetMode(int16 mode) { Mode = mode; }
+	
+	static bool IsNoOrObsolete() { return bDisplayNoControllerMessage || bObsoleteControllerMessage; }
 };
 
 VALIDATE_SIZE(CPad, 0xFC);

@@ -17,12 +17,15 @@ const int channels = ARRAY_SIZE(cAudioManager::m_asActiveSamples);
 const int policeChannel = channels + 1;
 const int allChannels = channels + 2;
 
+#define SPEED_OF_SOUND 343.f
+#define TIME_SPENT 50
+
 cAudioManager::cAudioManager()
 {
 	m_bIsInitialised = false;
-	field_1 = 1;
-	m_fSpeedOfSound = 6.86f;
-	m_nTimeSpent = 50;
+	m_bReverb = true;
+	m_fSpeedOfSound = SPEED_OF_SOUND / TIME_SPENT;
+	m_nTimeSpent = TIME_SPENT;
 	m_nActiveSamples = NUM_SOUNDS_SAMPLES_SLOTS;
 	m_nActiveSampleQueue = 1;
 	ClearRequestedQueue();
@@ -86,7 +89,7 @@ cAudioManager::Terminate()
 		m_sAudioScriptObjectManager.m_nScriptObjectEntityTotal = 0;
 		PreTerminateGameSpecificShutdown();
 
-		for (uint32 i = 0; i < MAX_SAMPLEBANKS; i++) {
+		for (uint32 i = 0; i < MAX_SFX_BANKS; i++) {
 			if (SampleManager.IsSampleBankLoaded(i))
 				SampleManager.UnloadSampleBank(i);
 		}
@@ -128,7 +131,7 @@ cAudioManager::CreateEntity(eAudioType type, void *entity)
 	for (uint32 i = 0; i < ARRAY_SIZE(m_asAudioEntities); i++) {
 		if (!m_asAudioEntities[i].m_bIsUsed) {
 			m_asAudioEntities[i].m_bIsUsed = true;
-			m_asAudioEntities[i].m_nStatus = 0;
+			m_asAudioEntities[i].m_bStatus = false;
 			m_asAudioEntities[i].m_nType = type;
 			m_asAudioEntities[i].m_pEntity = entity;
 			m_asAudioEntities[i].m_awAudioEvent[0] = SOUND_NO_SOUND;
@@ -163,11 +166,11 @@ void
 cAudioManager::SetEntityStatus(int32 id, uint8 status)
 {
 	if (m_bIsInitialised && id >= 0 && id < NUM_AUDIOENTITIES && m_asAudioEntities[id].m_bIsUsed)
-		m_asAudioEntities[id].m_nStatus = status;
+		m_asAudioEntities[id].m_bStatus = status;
 }
 
 void
-cAudioManager::PlayOneShot(int32 index, int16 sound, float vol)
+cAudioManager::PlayOneShot(int32 index, uint16 sound, float vol)
 {
 	static const uint8 OneShotPriority[] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5, 3, 5, 2, 2, 1, 1, 3, 1, 3, 3, 1, 1, 1, 4, 4, 3, 1, 1,
 	                                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 1, 1, 3, 2, 2, 2, 2, 0, 0, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -232,6 +235,12 @@ void
 cAudioManager::SetEffectsFadeVol(uint8 volume) const
 {
 	SampleManager.SetEffectsFadeVolume(volume);
+}
+
+void
+cAudioManager::SetMonoMode(uint8 mono)
+{
+	SampleManager.SetMonoMode(mono);
 }
 
 void
@@ -315,8 +324,13 @@ cAudioManager::Get3DProviderName(uint8 id) const
 {
 	if (!m_bIsInitialised)
 		return nil;
+#ifdef AUDIO_OAL
+	id = clamp(id, 0, SampleManager.GetNum3DProvidersAvailable() - 1);
+#else
+	// We don't want that either since it will crash the game, but skipping for now
 	if (id >= SampleManager.GetNum3DProvidersAvailable())
 		return nil;
+#endif
 	return SampleManager.Get3DProviderName(id);
 }
 
@@ -384,9 +398,9 @@ cAudioManager::ReacquireDigitalHandle() const
 }
 
 void
-cAudioManager::SetDynamicAcousticModelingStatus(bool status)
+cAudioManager::SetDynamicAcousticModelingStatus(uint8 status)
 {
-	m_bDynamicAcousticModelingStatus = status;
+	m_bDynamicAcousticModelingStatus = status!=0;
 }
 
 bool
@@ -430,7 +444,7 @@ cAudioManager::ServiceSoundEffects()
 		}
 		ClearActiveSamples();
 	}
-	m_nActiveSampleQueue = m_nActiveSampleQueue != 1;
+	m_nActiveSampleQueue = m_nActiveSampleQueue == 1 ? 0 : 1;
 	ProcessReverb();
 	ProcessSpecial();
 	ClearRequestedQueue();
@@ -680,7 +694,7 @@ cAudioManager::AddReleasingSounds()
 {
 	bool toProcess[44]; // why not 27?
 
-	int8 queue = m_nActiveSampleQueue == 0;
+	int8 queue = m_nActiveSampleQueue == 0 ? 1 : 0;
 
 	for (int32 i = 0; i < m_SampleRequestQueuesStatus[queue]; i++) {
 		tSound &sample = m_asSamples[queue][m_abSampleQueueIndexTable[queue][i]];
@@ -788,7 +802,11 @@ cAudioManager::ProcessActiveQueues()
 							if (sample.m_nFrequency != m_asActiveSamples[j].m_nFrequency) {
 								int32 freq;
 								if (sample.m_nFrequency <= m_asActiveSamples[j].m_nFrequency) {
-									freq = Max(sample.m_nFrequency, m_asActiveSamples[j].m_nFrequency - 6000);
+#ifdef FIX_BUGS
+									freq = Max((int32)sample.m_nFrequency, (int32)m_asActiveSamples[j].m_nFrequency - 6000);
+#else
+									freq = Max((int32)sample.m_nFrequency, int32(m_asActiveSamples[j].m_nFrequency - 6000));
+#endif
 								} else {
 									freq = Min(sample.m_nFrequency, m_asActiveSamples[j].m_nFrequency + 6000);
 								}
@@ -911,7 +929,7 @@ cAudioManager::ClearActiveSamples()
 		m_asActiveSamples[i].m_nEntityIndex = AEHANDLE_NONE;
 		m_asActiveSamples[i].m_nCounter = 0;
 		m_asActiveSamples[i].m_nSampleIndex = NO_SAMPLE;
-		m_asActiveSamples[i].m_nBankIndex = SAMPLEBANK_INVALID;
+		m_asActiveSamples[i].m_nBankIndex = INVALID_SFX_BANK;
 		m_asActiveSamples[i].m_bIs2D = false;
 		m_asActiveSamples[i].m_nReleasingVolumeModificator = 5;
 		m_asActiveSamples[i].m_nFrequency = 0;

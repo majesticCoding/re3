@@ -24,8 +24,8 @@ uint16 CRestart::NumberOfPoliceRestarts;
 void
 CRestart::Initialise()
 {
-	OverridePoliceStationLevel = LEVEL_NONE;
-	OverrideHospitalLevel = LEVEL_NONE;
+	OverridePoliceStationLevel = LEVEL_GENERIC;
+	OverrideHospitalLevel = LEVEL_GENERIC;
 	bFadeInAfterNextArrest = true;
 	bFadeInAfterNextDeath = true;
 	OverrideHeading = 0.0f;
@@ -81,12 +81,12 @@ CRestart::FindClosestHospitalRestartPoint(const CVector &pos, CVector *outPos, f
 	}
 
 	eLevelName curlevel = CTheZones::FindZoneForPoint(pos);
-	float fMinDist = 16000000.0f;
+	float fMinDist = SQR(4000.0f);
 	int closestPoint = NUM_RESTART_POINTS;
 
 	// find closest point on this level
 	for (int i = 0; i < NumberOfHospitalRestarts; i++) {
-		if (CTheZones::FindZoneForPoint(HospitalRestartPoints[i]) == (OverrideHospitalLevel != LEVEL_NONE ? OverrideHospitalLevel : curlevel)) {
+		if (CTheZones::FindZoneForPoint(HospitalRestartPoints[i]) == (OverrideHospitalLevel != LEVEL_GENERIC ? OverrideHospitalLevel : curlevel)) {
 			float dist = (pos - HospitalRestartPoints[i]).MagnitudeSqr();
 			if (fMinDist >= dist) {
 				fMinDist = dist;
@@ -128,12 +128,12 @@ CRestart::FindClosestPoliceRestartPoint(const CVector &pos, CVector *outPos, flo
 	}
 
 	eLevelName curlevel = CTheZones::FindZoneForPoint(pos);
-	float fMinDist = 16000000.0f;
+	float fMinDist = SQR(4000.0f);
 	int closestPoint = NUM_RESTART_POINTS;
 
 	// find closest point on this level
 	for (int i = 0; i < NumberOfPoliceRestarts; i++) {
-		if (CTheZones::FindZoneForPoint(PoliceRestartPoints[i]) == (OverridePoliceStationLevel != LEVEL_NONE ? OverridePoliceStationLevel : curlevel)) {
+		if (CTheZones::FindZoneForPoint(PoliceRestartPoints[i]) == (OverridePoliceStationLevel != LEVEL_GENERIC ? OverridePoliceStationLevel : curlevel)) {
 			float dist = (pos - PoliceRestartPoints[i]).MagnitudeSqr();
 			if (fMinDist >= dist) {
 				fMinDist = dist;

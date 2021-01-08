@@ -19,7 +19,12 @@
 
 #pragma warning( push )
 #pragma warning( disable : 4005)
+
+#ifdef USE_D3D9
+#include <d3d9.h>
+#else
 #include <d3d8.h>
+#endif
 #include <ddraw.h>
 #include <dinput.h>
 #include <DShow.h>
@@ -27,7 +32,9 @@
 
 #define WM_GRAPHNOTIFY	WM_USER+13
 
+#ifndef USE_D3D9
 #pragma comment( lib, "d3d8.lib" )
+#endif
 #pragma comment( lib, "ddraw.lib" )
 #pragma comment( lib, "Winmm.lib" )
 #pragma comment( lib, "dxguid.lib" )
@@ -76,7 +83,6 @@ static psGlobalType PsGlobal;
 	{debug(TEXT("FAILED(hr=0x%x) in ") TEXT(#x) TEXT("\n"), hr); return;}
 
 #include "common.h"
-#include "patcher.h"
 #include "main.h"
 #include "FileMgr.h"
 #include "Text.h"
@@ -87,8 +93,11 @@ static psGlobalType PsGlobal;
 #include "Frontend.h"
 #include "Game.h"
 #include "PCSave.h"
+#include "MemoryCard.h"
 #include "Sprite2d.h"
 #include "AnimViewer.h"
+#include "Font.h"
+#include "MemoryMgr.h"
 
 VALIDATE_SIZE(psGlobalType, 0x28);
 
@@ -101,7 +110,7 @@ IMediaSeeking *pMS = nil;
 
 DWORD dwDXVersion;
 SIZE_T _dwMemTotalPhys;
-SIZE_T _dwMemAvailPhys;
+size_t _dwMemAvailPhys;
 SIZE_T _dwMemTotalVirtual;
 SIZE_T _dwMemAvailVirtual;
 DWORD _dwMemTotalVideo;
@@ -233,6 +242,23 @@ psCameraShowRaster(RwCamera *camera)
 /*
  *****************************************************************************
  */
+RwImage *
+psGrabScreen(RwCamera *pCamera)
+{
+#ifndef LIBRW
+	RwRaster *pRaster = RwCameraGetRaster(pCamera);
+	if (RwImage *pImage = RwImageCreate(pRaster->width, pRaster->height, 32)) {
+		RwImageAllocatePixels(pImage);
+		RwImageSetFromRaster(pImage, pRaster);
+		return pImage;
+	}
+#endif
+	return nil;
+}
+
+/*
+ *****************************************************************************
+ */
 RwUInt32
 psTimer(void)
 {
@@ -279,7 +305,11 @@ psMouseSetPos(RwV2d *pos)
 RwMemoryFunctions*
 psGetMemoryFunctions(void)
 {
+#ifdef USE_CUSTOM_ALLOCATOR
+	return &memFuncs;
+#else
 	return nil;
+#endif
 }
 
 /*
@@ -300,34 +330,6 @@ psNativeTextureSupport(void)
 {
 	return RwD3D8DeviceSupportsDXTTexture();
 }
-
-/*
- *****************************************************************************
- */
-static BOOL
-InitApplication(HANDLE instance)
-{
-	/*
-	 * Perform any necessary MS Windows application initialization. Basically,
-	 * this means registering the window class for this application.
-	 */
-
-	WNDCLASS windowClass;
-
-	windowClass.style = CS_BYTEALIGNWINDOW;
-	windowClass.lpfnWndProc = (WNDPROC) MainWndProc;
-	windowClass.cbClsExtra = 0;
-	windowClass.cbWndExtra = 0;
-	windowClass.hInstance = (HINSTANCE)instance;
-	windowClass.hIcon = nil;
-	windowClass.hCursor = LoadCursor(nil, IDC_ARROW);
-	windowClass.hbrBackground = nil;
-	windowClass.lpszMenuName = NULL;
-	windowClass.lpszClassName = AppClassName;
-
-	return RegisterClass(&windowClass);
-}
-
 
 /*
  *****************************************************************************
@@ -448,6 +450,16 @@ DWORD GetDXVersion()
 	dwDXVersion = 0x700;
 	pDD7->Release();
 
+#ifdef USE_D3D9
+	HINSTANCE hD3D9DLL = LoadLibrary("D3D9.DLL");
+	if (hD3D9DLL != nil) {
+		FreeLibrary(hDDrawDLL);
+		FreeLibrary(hD3D9DLL);
+
+		dwDXVersion = 0x900;
+		return dwDXVersion;
+	}
+#endif
 
 	//-------------------------------------------------------------------------
 	// DirectX 8.0 Checks
@@ -497,6 +509,7 @@ DWORD GetDXVersion()
 /*
  *****************************************************************************
  */
+#ifndef _WIN64
 static char cpuvendor[16] = "UnknownVendr";
 __declspec(naked)  const char * _psGetCpuVendr()
 {
@@ -570,6 +583,7 @@ void _psPrintCpuInfo()
 	if ( FeaturesEx & 0x80000000 )
 		debug("with 3DNow");
 }
+#endif
 
 /*
  *****************************************************************************
@@ -598,19 +612,56 @@ psInitialize(void)
 	PsGlobal.joy2	= nil;
 
 	CFileMgr::Initialise();
+
+#ifdef PS2_MENU
+	CPad::Initialise();
+	CPad::GetPad(0)->Mode = 0;
 	
+	CGame::frenchGame = false;
+	CGame::germanGame = false;
+	CGame::nastyGame = true;
+	CMenuManager::m_PrefsAllowNastyGame = true;
+	
+	WORD lang	= PRIMARYLANGID(GetSystemDefaultLCID());
+	if ( lang  == LANG_ITALIAN )
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
+	else if ( lang  == LANG_SPANISH )
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
+	else if ( lang  == LANG_GERMAN )
+	{
+		CGame::germanGame = true;
+		CGame::nastyGame = false;
+		CMenuManager::m_PrefsAllowNastyGame = false;
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
+	}
+	else if ( lang  == LANG_FRENCH )
+	{
+		CGame::frenchGame = true;
+		CGame::nastyGame = false;
+		CMenuManager::m_PrefsAllowNastyGame = false;
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
+	}
+	else
+		CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
+	
+	FrontEndMenuManager.InitialiseMenuContentsAfterLoadingGame();
+	
+	TheMemoryCard.Init();
+#else
 	C_PcSave::SetSaveDirectory(_psGetUserFilesFolder());
 	
 	InitialiseLanguage();
-#ifndef GTA3_1_1_PATCH
+#if GTA_VERSION >= GTA3_PC_11
 	FrontEndMenuManager.LoadSettings();
+#endif
+
 #endif
 	
 	gGameState = GS_START_UP;
 	TRACE("gGameState = GS_START_UP");
-	
+#ifndef _WIN64
 	_psPrintCpuInfo();
-	
+#endif
 	OSVERSIONINFO verInfo;
 	verInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	
@@ -638,7 +689,7 @@ psInitialize(void)
 	}
 	else if ( verInfo.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS )
 	{
-		if ( verInfo.dwMajorVersion > 4 || verInfo.dwMajorVersion == 4 && verInfo.dwMinorVersion == 1 )
+		if ( verInfo.dwMajorVersion > 4 || verInfo.dwMajorVersion == 4 && verInfo.dwMinorVersion != 0 )
 		{
 			debug("Operating System is Win98\n");
 			_dwOperatingSystemVersion = OS_WIN98;
@@ -650,8 +701,12 @@ psInitialize(void)
 		}
 	}
 
-#ifdef GTA3_1_1_PATCH
+#ifndef PS2_MENU
+
+#if GTA_VERSION >= GTA3_PC_11
 	FrontEndMenuManager.LoadSettings();
+#endif
+
 #endif
 
 	dwDXVersion = GetDXVersion();
@@ -962,9 +1017,10 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			RECT				rect;
 
 			/* redraw window */
-			if (RwInitialised && (gGameState == GS_PLAYING_GAME || gGameState == GS_ANIMVIEWER))
+
+			if (RwInitialised && gGameState == GS_PLAYING_GAME)
 			{
-				RsEventHandler((gGameState == GS_PLAYING_GAME ? rsIDLE : rsANIMVIEWER), (void *)TRUE);
+				RsEventHandler(rsIDLE, (void *)TRUE);
 			}
 
 			/* Manually resize window */
@@ -1045,8 +1101,11 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if ( wParam == VK_SHIFT )
 				_InputTranslateShiftKeyUpDown(&ks);
-
+#ifdef FIX_BUGS
+			break;
+#else
 			return 0L;
+#endif
 		}
 
 		case WM_KEYUP:
@@ -1059,7 +1118,11 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			if ( wParam == VK_SHIFT )
 				_InputTranslateShiftKeyUpDown(&ks);
 
+#ifdef FIX_BUGS
+			break;
+#else
 			return 0L;
+#endif
 		}
 
 		case WM_SYSKEYDOWN:
@@ -1072,7 +1135,11 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			if ( wParam == VK_SHIFT )
 				_InputTranslateShiftKeyUpDown(&ks);
 
+#ifdef FIX_BUGS
+			break;
+#else
 			return 0L;
+#endif
 		}
 
 		case WM_SYSKEYUP:
@@ -1085,7 +1152,11 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			if ( wParam == VK_SHIFT )
 				_InputTranslateShiftKeyUpDown(&ks);
 
+#ifdef FIX_BUGS
+			break;
+#else
 			return 0L;
+#endif
 		}
 
 		case WM_ACTIVATEAPP:
@@ -1234,6 +1305,34 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 /*
  *****************************************************************************
  */
+static BOOL
+InitApplication(HANDLE instance)
+{
+	/*
+	 * Perform any necessary MS Windows application initialization. Basically,
+	 * this means registering the window class for this application.
+	 */
+
+	WNDCLASS windowClass;
+
+	windowClass.style = CS_BYTEALIGNWINDOW;
+	windowClass.lpfnWndProc = (WNDPROC)MainWndProc;
+	windowClass.cbClsExtra = 0;
+	windowClass.cbWndExtra = 0;
+	windowClass.hInstance = (HINSTANCE)instance;
+	windowClass.hIcon = nil;
+	windowClass.hCursor = LoadCursor(nil, IDC_ARROW);
+	windowClass.hbrBackground = nil;
+	windowClass.lpszMenuName = NULL;
+	windowClass.lpszClassName = AppClassName;
+
+	return RegisterClass(&windowClass);
+}
+
+
+/*
+ *****************************************************************************
+ */
 
 RwBool IsForegroundApp()
 {
@@ -1242,8 +1341,11 @@ RwBool IsForegroundApp()
 
 UINT GetBestRefreshRate(UINT width, UINT height, UINT depth)
 {
+#ifdef USE_D3D9
+	LPDIRECT3D9 d3d = Direct3DCreate9(D3D_SDK_VERSION);
+#else
 	LPDIRECT3D8 d3d = Direct3DCreate8(D3D_SDK_VERSION);
-	
+#endif
 	ASSERT(d3d != nil);
 	
 	UINT refreshRate = INT_MAX;
@@ -1256,24 +1358,37 @@ UINT GetBestRefreshRate(UINT width, UINT height, UINT depth)
 	else
 		format = D3DFMT_R5G6B5;
 	
+#ifdef USE_D3D9
+	UINT modeCount = d3d->GetAdapterModeCount(GcurSel, format);
+#else
 	UINT modeCount = d3d->GetAdapterModeCount(GcurSel);
-	
+#endif
+
 	for ( UINT i = 0; i < modeCount; i++ )
 	{
 		D3DDISPLAYMODE mode;
 		
+#ifdef USE_D3D9
+		d3d->EnumAdapterModes(GcurSel, format, i, &mode);
+#else
 		d3d->EnumAdapterModes(GcurSel, i, &mode);
-		
+#endif	
 		if ( mode.Width == width && mode.Height == height && mode.Format == format )
 		{
-			if ( mode.RefreshRate == 0 )
+			if ( mode.RefreshRate == 0 ) {
+				// From VC
+#ifdef FIX_BUGS
+				d3d->Release();
+#endif
 				return 0;
+			}
 
 			if ( mode.RefreshRate < refreshRate && mode.RefreshRate >= 60 )
 				refreshRate = mode.RefreshRate;
 		}
 	}
 	
+	// From VC
 #ifdef FIX_BUGS
 	d3d->Release();
 #endif
@@ -1437,7 +1552,9 @@ psSelectDevice()
 	FrontEndMenuManager.m_nPrefsDepth = vm.depth;
 #endif
 
+#ifndef PS2_MENU
 	FrontEndMenuManager.m_nCurrOption = 0;
+#endif
 	
 	/* Set up the video mode and set the apps window
 	* dimensions to match */
@@ -1507,7 +1624,9 @@ psSelectDevice()
 		PSGLOBAL(fullScreen) = FALSE;
 #endif
 	}
-
+#ifdef MULTISAMPLING
+	RwD3D8EngineSetMultiSamplingLevels(1 << FrontEndMenuManager.m_nPrefsMSAALevel);
+#endif
 	return TRUE;
 }
 
@@ -1555,7 +1674,7 @@ CommandLineToArgv(RwChar *cmdLine, RwInt32 *argCount)
 	RwInt32 i, len;
 	RwChar *res, *str, **aptr;
 
-	len = strlen(cmdLine);
+	len = (int)strlen(cmdLine);
 
 	/* 
 	 * Count the number of arguments...
@@ -1643,11 +1762,11 @@ void InitialiseLanguage()
 {
 	WORD primUserLCID	= PRIMARYLANGID(GetSystemDefaultLCID());
 	WORD primSystemLCID = PRIMARYLANGID(GetUserDefaultLCID());
-	WORD primLayout		= PRIMARYLANGID((DWORD)GetKeyboardLayout(0));
+	WORD primLayout		= PRIMARYLANGID((DWORD_PTR)GetKeyboardLayout(0));
 	
 	WORD subUserLCID	= SUBLANGID(GetSystemDefaultLCID());
 	WORD subSystemLCID	= SUBLANGID(GetUserDefaultLCID());
-	WORD subLayout		= SUBLANGID((DWORD)GetKeyboardLayout(0));
+	WORD subLayout		= SUBLANGID((DWORD_PTR)GetKeyboardLayout(0));
 	
 	if (   primUserLCID	  == LANG_GERMAN
 		|| primSystemLCID == LANG_GERMAN
@@ -1715,27 +1834,27 @@ void InitialiseLanguage()
 	{
 		case LANG_GERMAN:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_GERMAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
 			break;
 		}
 		case LANG_SPANISH:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_SPANISH;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
 			break;
 		}
 		case LANG_FRENCH:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_FRENCH;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
 			break;
 		}
 		case LANG_ITALIAN:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_ITALIAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
 			break;
 		}
 		default:
 		{
-			CMenuManager::m_PrefsLanguage = LANGUAGE_AMERICAN;
+			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
 			break;
 		}
 	}
@@ -1778,7 +1897,11 @@ void PlayMovieInWindow(int cmdShow, const char* szFile)
 	MultiByteToWideChar(CP_ACP, 0, szFile, -1, wFileName, sizeof(wFileName) - 1);
 
 	// Initialize COM
+#ifdef FIX_BUGS // will also return S_FALSE if it has already been inited in the same thread
+	CoInitialize(nil);
+#else
 	JIF(CoInitialize(nil));
+#endif
 
 	// Get the interface for DirectShow's GraphBuilder
 	JIF(CoCreateInstance(CLSID_FilterGraph, nil, CLSCTX_INPROC, 
@@ -1881,16 +2004,21 @@ WinMain(HINSTANCE instance,
 	RwV2d pos;
 	RwInt32 argc, i;
 	RwChar **argv;
-	StaticPatcher::Apply();
 	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, nil, SPIF_SENDCHANGE);
 
-/*
-	// TODO: make this an option somewhere
-	AllocConsole();
-	freopen("CONIN$", "r", stdin);
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONOUT$", "w", stderr);
-*/
+#ifndef MASTER
+	if (strstr(cmdLine, "-console"))
+	{
+		AllocConsole();
+		freopen("CONIN$", "r", stdin);
+		freopen("CONOUT$", "w", stdout);
+		freopen("CONOUT$", "w", stderr);
+	}
+#endif
+
+#ifdef USE_CUSTOM_ALLOCATOR
+	InitMemoryMgr();
+#endif
 
 	/* 
 	 * Initialize the platform independent data.
@@ -2033,24 +2161,35 @@ WinMain(HINSTANCE instance,
 	
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
-	if (!TurnOnAnimViewer) {
-#ifdef NO_MOVIES
-		gGameState = GS_INIT_FRONTEND;
-		TRACE("gGameState = GS_INIT_FRONTEND");
-
+			
+#ifdef PS2_MENU
+	int32 r = TheMemoryCard.CheckCardStateAtGameStartUp(CARD_ONE);
+	if (   r == CMemoryCard::ERR_DIRNOENTRY  || r == CMemoryCard::ERR_NOFORMAT
+		&& r != CMemoryCard::ERR_OPENNOENTRY && r != CMemoryCard::ERR_NONE )
+	{
 		LoadingScreen(nil, nil, "loadsc0");
-		if (!CGame::InitialiseOnceAfterRW())
-			RsGlobal.quit = TRUE;
+		
+		TheText.Unload();
+		TheText.Load();
+		
+		CFont::Initialise();
+		
+		FrontEndMenuManager.DrawMemoryCardStartUpMenus();
+	}
 #endif
-	} else {
+
 #ifndef MASTER
+	if (gbModelViewer) {
+		// This is TheModelViewer in LCS, but not compiled on III Mobile.
+		LoadingScreen("Loading the ModelViewer", NULL, GetRandomSplashScreen());
 		CAnimViewer::Initialise();
+		CTimer::Update();
+#ifndef PS2_MENU
 		FrontEndMenuManager.m_bGameNotLoaded = false;
-		gGameState = GS_ANIMVIEWER;
-		TurnOnAnimViewer = false;
 #endif
 	}
-	
+#endif
+
 	while ( TRUE )
 	{
 		RwInitialised = TRUE;
@@ -2069,8 +2208,18 @@ WinMain(HINSTANCE instance,
 		/*
 		* Enter the message processing loop...
 		*/
-
+#ifdef PS2_MENU
+		if (TheMemoryCard.m_bWantToLoad)
+			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
+		
+		TheMemoryCard.m_bWantToLoad = false;
+		
+		CTimer::Update();
+		
+		while( !RsGlobal.quit && !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad) )
+#else
 		while( !RsGlobal.quit && !FrontEndMenuManager.m_bWantToRestart )
+#endif
 		{
 			if( PeekMessage(&message, nil, 0U, 0U, PM_REMOVE|PM_NOYIELD) )
 			{
@@ -2084,13 +2233,23 @@ WinMain(HINSTANCE instance,
 					DispatchMessage(&message);
 				}
 			}
+#ifndef MASTER
+			else if (gbModelViewer) {
+				// This is TheModelViewerCore in LCS
+				TheModelViewer();
+			}
+#endif
 			else if( ForegroundApp )
 			{
 				switch ( gGameState )
 				{
 					case GS_START_UP:
 					{
+#ifdef NO_MOVIES
+						gGameState = GS_INIT_ONCE;
+#else
 						gGameState = GS_INIT_LOGO_MPEG;
+#endif
 						TRACE("gGameState = GS_INIT_LOGO_MPEG");
 						break;
 					}
@@ -2126,9 +2285,10 @@ WinMain(HINSTANCE instance,
 					
 					case GS_INIT_INTRO_MPEG:
 					{
+#ifndef NO_MOVIES
 						CloseClip();
-						
 						CoUninitialize();
+#endif
 						
 						if ( CMenuManager::OS_Language == LANG_FRENCH || CMenuManager::OS_Language == LANG_GERMAN )
 							PlayMovieInWindow(cmdShow, "movies\\GTAtitlesGER.mpg");
@@ -2162,19 +2322,40 @@ WinMain(HINSTANCE instance,
 					
 					case GS_INIT_ONCE:
 					{
+#ifndef NO_MOVIES
 						CloseClip();
 						CoUninitialize();
+#endif
 						
+#ifdef FIX_BUGS
+						// draw one frame because otherwise we'll end up looking at black screen for a while if vsync is on
+						RsCameraShowRaster(Scene.camera);
+#endif
+
+#ifdef PS2_MENU
+						extern char version_name[64];
+						if ( CGame::frenchGame || CGame::germanGame )
+							LoadingScreen(NULL, version_name, "loadsc24");
+						else
+							LoadingScreen(NULL, version_name, "loadsc0");
+						
+						printf("Into TheGame!!!\n");
+#else				
 						LoadingScreen(nil, nil, "loadsc0");
-						
+#endif
 						if ( !CGame::InitialiseOnceAfterRW() )
 							RsGlobal.quit = TRUE;
-						
+				
+#ifdef PS2_MENU
+						gGameState = GS_INIT_PLAYING_GAME;
+#else
 						gGameState = GS_INIT_FRONTEND;
 						TRACE("gGameState = GS_INIT_FRONTEND;");
+#endif
 						break;
 					}
 					
+#ifndef PS2_MENU
 					case GS_INIT_FRONTEND:
 					{
 						LoadingScreen(nil, nil, "loadsc0");
@@ -2202,13 +2383,21 @@ WinMain(HINSTANCE instance,
 						if (wp.showCmd != SW_SHOWMINIMIZED)
 							RsEventHandler(rsFRONTENDIDLE, nil);
 
+#ifdef PS2_MENU
+						if ( !FrontEndMenuManager.m_bMenuActive || TheMemoryCard.m_bWantToLoad )
+#else
 						if ( !FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bWantToLoad )
+#endif
 						{
 							gGameState = GS_INIT_PLAYING_GAME;
 							TRACE("gGameState = GS_INIT_PLAYING_GAME;");
 						}
 
+#ifdef PS2_MENU
+						if (TheMemoryCard.m_bWantToLoad )
+#else
 						if ( FrontEndMenuManager.m_bWantToLoad )
+#endif
 						{
 							InitialiseGame();
 							FrontEndMenuManager.m_bGameNotLoaded = false;
@@ -2217,11 +2406,37 @@ WinMain(HINSTANCE instance,
 						}
 						break;
 					}
+#endif
 					
 					case GS_INIT_PLAYING_GAME:
 					{
+#ifdef PS2_MENU
+						CGame::Initialise("DATA\\GTA3.DAT");
+						
+						//LoadingScreen("Starting Game", NULL, GetRandomSplashScreen());
+					
+						if (   TheMemoryCard.CheckCardInserted(CARD_ONE) == CMemoryCard::NO_ERR_SUCCESS
+							&& TheMemoryCard.ChangeDirectory(CARD_ONE, TheMemoryCard.Cards[CARD_ONE].dir)
+							&& TheMemoryCard.FindMostRecentFileName(CARD_ONE, TheMemoryCard.MostRecentFile) == true
+							&& TheMemoryCard.CheckDataNotCorrupt(TheMemoryCard.MostRecentFile))
+						{
+							strcpy(TheMemoryCard.LoadFileName, TheMemoryCard.MostRecentFile);
+							TheMemoryCard.b_FoundRecentSavedGameWantToLoad = true;
+					
+							if (CMenuManager::m_PrefsLanguage != TheMemoryCard.GetLanguageToLoad())
+							{
+								CMenuManager::m_PrefsLanguage = TheMemoryCard.GetLanguageToLoad();
+								TheText.Unload();
+								TheText.Load();
+							}
+					
+							CGame::currLevel = (eLevelName)TheMemoryCard.GetLevelToLoad();
+						}
+#else
 						InitialiseGame();
+
 						FrontEndMenuManager.m_bGameNotLoaded = false;
+#endif
 						gGameState = GS_PLAYING_GAME;
 						TRACE("gGameState = GS_PLAYING_GAME;");
 						break;
@@ -2237,18 +2452,6 @@ WinMain(HINSTANCE instance,
 						}
 						break;
 					}
-#ifndef MASTER
-					case GS_ANIMVIEWER:
-					{
-						float ms = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
-						if (RwInitialised)
-						{
-							if (!CMenuManager::m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
-								RsEventHandler(rsANIMVIEWER, (void*)TRUE);
-						}
-						break;
-					}
-#endif
 				}
 			}
 			else
@@ -2271,16 +2474,45 @@ WinMain(HINSTANCE instance,
 		RwInitialised = FALSE;
 		
 		FrontEndMenuManager.UnloadTextures();
+#ifdef PS2_MENU	
+		if ( !(FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad))
+			break;
+#else
 		if ( !FrontEndMenuManager.m_bWantToRestart )
 			break;
+#endif
 		
 		CPad::ResetCheats();
 		CPad::StopPadsShaking();
 		
 		DMAudio.ChangeMusicMode(MUSICMODE_DISABLE);
 		
+#ifdef PS2_MENU
+		CGame::ShutDownForRestart();
+#endif
 		CTimer::Stop();
 		
+#ifdef PS2_MENU
+		if (FrontEndMenuManager.m_bWantToRestart || TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+		{
+			if (TheMemoryCard.b_FoundRecentSavedGameWantToLoad)
+			{
+				FrontEndMenuManager.m_bWantToRestart = true;
+				TheMemoryCard.m_bWantToLoad = true;
+			}
+
+			CGame::InitialiseWhenRestarting();
+			DMAudio.ChangeMusicMode(MUSICMODE_GAME);
+			FrontEndMenuManager.m_bWantToRestart = false;
+			
+			continue;
+		}
+		
+		CGame::ShutDown();	
+		CTimer::Stop();
+		
+		break;
+#else
 		if ( FrontEndMenuManager.m_bWantToLoad )
 		{
 			CGame::ShutDownForRestart();
@@ -2291,11 +2523,14 @@ WinMain(HINSTANCE instance,
 		}
 		else
 		{
+#ifndef MASTER
+			if ( gbModelViewer )
+				CAnimViewer::Shutdown();
+			else
+#endif
 			if ( gGameState == GS_PLAYING_GAME )
 				CGame::ShutDown();
-			else if ( gGameState == GS_ANIMVIEWER )
-				CAnimViewer::Shutdown();
-			
+
 			CTimer::Stop();
 			
 			if ( FrontEndMenuManager.m_bFirstTime == true )
@@ -2312,13 +2547,17 @@ WinMain(HINSTANCE instance,
 		
 		FrontEndMenuManager.m_bFirstTime = false;
 		FrontEndMenuManager.m_bWantToRestart = false;
+#endif
 	}
 	
 
+#ifndef MASTER
+	if ( gbModelViewer )
+		CAnimViewer::Shutdown();
+	else
+#endif
 	if ( gGameState == GS_PLAYING_GAME )
 		CGame::ShutDown();
-	else if ( gGameState == GS_ANIMVIEWER )
-		CAnimViewer::Shutdown();
 
 	DMAudio.Terminate();
 	

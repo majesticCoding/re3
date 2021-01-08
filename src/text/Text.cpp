@@ -23,37 +23,37 @@ CText::Load(void)
 {
 	uint8 *filedata;
 	char filename[32], type[4];
-	int length;
-	int offset, sectlen;
+	ssize_t offset, length;
+	size_t sectlen;
 
 	Unload();
 	filedata = new uint8[0x40000];
 
 	CFileMgr::SetDir("TEXT");
 	switch(CMenuManager::m_PrefsLanguage){
-	case LANGUAGE_AMERICAN:
+	case CMenuManager::LANGUAGE_AMERICAN:
 		sprintf(filename, "AMERICAN.GXT");
 		break;
-	case LANGUAGE_FRENCH:
+	case CMenuManager::LANGUAGE_FRENCH:
 		sprintf(filename, "FRENCH.GXT");
 		break;
-	case LANGUAGE_GERMAN:
+	case CMenuManager::LANGUAGE_GERMAN:
 		sprintf(filename, "GERMAN.GXT");
 		break;
-	case LANGUAGE_ITALIAN:
+	case CMenuManager::LANGUAGE_ITALIAN:
 		sprintf(filename, "ITALIAN.GXT");
 		break;
-	case LANGUAGE_SPANISH:
+	case CMenuManager::LANGUAGE_SPANISH:
 		sprintf(filename, "SPANISH.GXT");
 		break;
 #ifdef MORE_LANGUAGES
-	case LANGUAGE_POLISH:
+	case CMenuManager::LANGUAGE_POLISH:
 		sprintf(filename, "POLISH.GXT");
 		break;
-	case LANGUAGE_RUSSIAN:
+	case CMenuManager::LANGUAGE_RUSSIAN:
 		sprintf(filename, "RUSSIAN.GXT");
 		break;
-	case LANGUAGE_JAPANESE:
+	case CMenuManager::LANGUAGE_JAPANESE:
 		sprintf(filename, "JAPANESE.GXT");
 		break;
 #endif
@@ -176,12 +176,13 @@ CText::UpperCase(wchar *s)
 
 
 void
-CKeyArray::Load(uint32 length, uint8 *data, int *offset)
+CKeyArray::Load(size_t length, uint8 *data, ssize_t *offset)
 {
-	uint32 i;
+	size_t i;
 	uint8 *rawbytes;
 
-	numEntries = length / sizeof(CKeyEntry);
+	// You can make numEntries size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+	numEntries = (int)(length / sizeof(CKeyEntry));
 	entries = new CKeyEntry[numEntries];
 	rawbytes = (uint8*)entries;
 
@@ -255,12 +256,13 @@ CKeyArray::Search(const char *key)
 
 
 void
-CData::Load(uint32 length, uint8 *data, int *offset)
+CData::Load(size_t length, uint8 *data, ssize_t *offset)
 {
-	uint32 i;
+	size_t i;
 	uint8 *rawbytes;
 
-	numChars = length / sizeof(wchar);
+	// You can make numChars size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+	numChars = (int)(length / sizeof(wchar));
 	chars = new wchar[numChars];
 	rawbytes = (uint8*)chars;
 
@@ -274,12 +276,6 @@ CData::Unload(void)
 	delete[] chars;
 	chars = nil;
 	numChars = 0;
-}
-
-void
-AsciiToUnicode(const char *src, wchar *dst)
-{
-	while((*dst++ = (unsigned char)*src++) != '\0');
 }
 
 char*
@@ -305,7 +301,7 @@ UnicodeToAsciiForSaveLoad(wchar *src)
 {
 	static char aStr[256];
 	int len;
-	for(len = 0; *src != '\0' && len < 256-1; len++, src++)
+	for(len = 0; *src != '\0' && len < 256; len++, src++)
 		if(*src < 256)
 			aStr[len] = *src;
 		else
@@ -314,18 +310,18 @@ UnicodeToAsciiForSaveLoad(wchar *src)
 	return aStr;
 }
 
-void
-UnicodeStrcpy(wchar *dst, const wchar *src)
+char*
+UnicodeToAsciiForMemoryCard(wchar *src)
 {
-	while((*dst++ = *src++) != '\0');
-}
-
-int
-UnicodeStrlen(const wchar *str)
-{
+	static char aStr[256];
 	int len;
-	for(len = 0; *str != '\0'; len++, str++);
-	return len;
+	for(len = 0; *src != '\0' && len < 256; len++, src++)
+		if(*src < 256)
+			aStr[len] = *src;
+		else
+			aStr[len] = '#';
+	aStr[len] = '\0';
+	return aStr;
 }
 
 void

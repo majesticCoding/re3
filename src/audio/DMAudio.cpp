@@ -5,8 +5,6 @@
 #include "AudioManager.h"
 #include "AudioScriptObject.h"
 #include "sampman.h"
-#include "Text.h"
-#include "crossplatform.h"
 
 cDMAudio DMAudio;
 
@@ -59,6 +57,12 @@ cDMAudio::DestroyAllGameCreatedEntities(void)
 }
 
 void
+cDMAudio::SetMonoMode(uint8 mono)
+{
+	AudioManager.SetMonoMode(mono);
+}
+
+void
 cDMAudio::SetEffectsMasterVolume(uint8 volume)
 {
 	uint8 vol = volume;
@@ -104,28 +108,6 @@ char *
 cDMAudio::Get3DProviderName(uint8 id)
 {
 	return AudioManager.Get3DProviderName(id);
-}
-
-int8 cDMAudio::AutoDetect3DProviders(void)
-{
-	for ( int32 i = 0; i < GetNum3DProvidersAvailable(); i++ )
-	{
-		wchar buff[64];
-		
-		char *name = Get3DProviderName(i);
-		AsciiToUnicode(name, buff);
-		char *providername = UnicodeToAscii(buff);
-		strupr(providername);
-#if defined(AUDIO_MSS)
-		if ( !strcmp(providername, "MILES FAST 2D POSITIONAL AUDIO") )
-			return i;
-#elif defined(AUDIO_OAL)
-		if ( !strcmp(providername, "OPENAL SOFT") )
-			return i;
-#endif
-	}
-
-	return -1;
 }
 
 int8
@@ -191,13 +173,13 @@ cDMAudio::IsAudioInitialised(void)
 void
 cDMAudio::ReportCrime(eCrimeType crime, const CVector &pos)
 {
-	AudioManager.ReportCrime(crime, &pos);
+	AudioManager.ReportCrime(crime, pos);
 }
 
 int32
 cDMAudio::CreateLoopingScriptObject(cAudioScriptObject *scriptObject)
 {
-	int32 audioEntity = AudioManager.CreateEntity(AUDIOTYPE_SCRIPTOBJECT, (CPhysical *)scriptObject);
+	int32 audioEntity = AudioManager.CreateEntity(AUDIOTYPE_SCRIPTOBJECT, scriptObject);
 
 	if ( AEHANDLE_IS_OK(audioEntity) )
 		AudioManager.SetEntityStatus(audioEntity, true);
@@ -214,7 +196,7 @@ cDMAudio::DestroyLoopingScriptObject(int32 audioEntity)
 void
 cDMAudio::CreateOneShotScriptObject(cAudioScriptObject *scriptObject)
 {
-	int32 audioEntity = AudioManager.CreateEntity(AUDIOTYPE_SCRIPTOBJECT, (CPhysical *)scriptObject);
+	int32 audioEntity = AudioManager.CreateEntity(AUDIOTYPE_SCRIPTOBJECT, scriptObject);
 
 	if ( AEHANDLE_IS_OK(audioEntity) )
 	{
@@ -338,7 +320,7 @@ cDMAudio::SetRadioInCar(uint32 radio)
 }
 
 void
-cDMAudio::SetRadioChannel(int8 radio, int32 pos)
+cDMAudio::SetRadioChannel(uint8 radio, int32 pos)
 {
 	MusicManager.SetRadioChannelByScript(radio, pos);
 }
