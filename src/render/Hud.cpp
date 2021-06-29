@@ -26,7 +26,15 @@
 #include "General.h"
 #include "VarConsole.h"
 
-// --MIAMI: file done
+#if defined(FIX_BUGS)
+	#define SCREEN_SCALE_X_FIX(a) SCREEN_SCALE_X(a)
+	#define SCREEN_SCALE_Y_FIX(a) SCREEN_SCALE_Y(a)
+	#define SCALE_AND_CENTER_X_FIX(a) SCALE_AND_CENTER_X(a)
+#else
+	#define SCREEN_SCALE_X_FIX(a) (a)
+	#define SCREEN_SCALE_Y_FIX(a) (a)
+	#define SCALE_AND_CENTER_X_FIX(a) (a)
+#endif
 
 // Game has colors inlined in code.
 // For easier modification we collect them here:
@@ -439,10 +447,10 @@ void CHud::Draw()
 		}
 		if (m_WeaponState != FADED_OUT) {
 			CWeapon *weapon = playerPed->GetWeapon();
-			uint32 AmmoAmount = CWeaponInfo::GetWeaponInfo((eWeaponType)WeaponType)->m_nAmountofAmmunition;
-			uint32 AmmoInClip = weapon->m_nAmmoInClip;
-			uint32 TotalAmmo = weapon->m_nAmmoTotal;
-			uint32 Ammo, Clip;
+			int32 AmmoAmount = CWeaponInfo::GetWeaponInfo((eWeaponType)WeaponType)->m_nAmountofAmmunition;
+			int32 AmmoInClip = weapon->m_nAmmoInClip;
+			int32 TotalAmmo = weapon->m_nAmmoTotal;
+			int32 Ammo, Clip;
 
 			if (AmmoAmount <= 1 || AmmoAmount >= 1000)
 				sprintf(sTemp, "%d", TotalAmmo);
@@ -481,7 +489,7 @@ void CHud::Draw()
 					CBaseModelInfo *weaponModel = CModelInfo::GetModelInfo(weaponInfo->m_nModelId);
 					RwTexDictionary *weaponTxd = CTxdStore::GetSlot(weaponModel->GetTxdSlot())->texDict;
 					if (weaponTxd) {
-						RwTexture *weaponIcon = RwTexDictionaryFindNamedTexture(weaponTxd, weaponModel->GetName());
+						RwTexture *weaponIcon = RwTexDictionaryFindNamedTexture(weaponTxd, weaponModel->GetModelName());
 						if (weaponIcon) {
 							RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 #ifndef FIX_BUGS
@@ -609,11 +617,11 @@ void CHud::Draw()
 		/*
 			DrawWantedLevel
 		*/
-		if (m_LastWanted == playerPed->m_pWanted->m_nWantedLevel) {
+		if (m_LastWanted == playerPed->m_pWanted->GetWantedLevel()) {
 			alpha = DrawFadeState(HUD_WANTED_FADING, 0);
 		} else {
 			alpha = DrawFadeState(HUD_WANTED_FADING, 1);
-			m_LastWanted = playerPed->m_pWanted->m_nWantedLevel;
+			m_LastWanted = playerPed->m_pWanted->GetWantedLevel();
 		}
 
 		if (m_WantedState != FADED_OUT) {
@@ -629,7 +637,7 @@ void CHud::Draw()
 
 			for (int i = 0; i < 6; i++) {
 				if (FrontEndMenuManager.m_PrefsShowHud) {
-					if (playerPed->m_pWanted->m_nWantedLevel > i
+					if (playerPed->m_pWanted->GetWantedLevel() > i
 						&& (CTimer::GetTimeInMilliseconds() > playerPed->m_pWanted->m_nLastWantedLevelChange
 							+ 2000 || CTimer::GetFrameCounter() & 4)) {
 
@@ -642,7 +650,7 @@ void CHud::Draw()
 						CFont::SetColor(WANTED_COLOR_FLASH);
 						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 23.0f * i), SCREEN_SCALE_Y(87.0f), sPrintIcon);
 
-					} else if (playerPed->m_pWanted->m_nWantedLevel <= i) {
+					} else if (playerPed->m_pWanted->GetWantedLevel() <= i) {
 						NOTWANTED_COLOR.a = alpha;
 						CFont::SetColor(NOTWANTED_COLOR);
 						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(110.0f + 23.0f * i), SCREEN_SCALE_Y(87.0f), sPrintIcon);
@@ -1052,16 +1060,17 @@ void CHud::Draw()
 			CRadar::DrawMap();
 			if (FrontEndMenuManager.m_PrefsRadarMode != 1) {
 				CRect rect(0.0f, 0.0f, SCREEN_SCALE_X(RADAR_WIDTH), SCREEN_SCALE_Y(RADAR_HEIGHT));
-#ifdef FIX_BUGS
-				rect.Translate(SCREEN_SCALE_X(RADAR_LEFT), SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
-#else
-				rect.Translate(RADAR_LEFT, SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
-#endif
+				
+				rect.Translate(SCREEN_SCALE_X_FIX(RADAR_LEFT), SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
 
+#ifdef FIX_BUGS
+				rect.Grow(SCREEN_SCALE_X(6.0f), SCREEN_SCALE_X(6.0f), SCREEN_SCALE_Y(6.0f), SCREEN_SCALE_Y(6.0f));
+#else
 				rect.Grow(6.0f);
-				rect.Translate(0.0f, 2.0f);
+#endif
+				rect.Translate(SCREEN_SCALE_X_FIX(0.0f), SCREEN_SCALE_Y_FIX(2.0f));
 				Sprites[HUD_RADARDISC].Draw(rect, CRGBA(0, 0, 0, 255));
-				rect.Translate(0.0f, -2.0f);
+				rect.Translate(SCREEN_SCALE_X_FIX(0.0f), SCREEN_SCALE_Y_FIX(-2.0f));
 				Sprites[HUD_RADARDISC].Draw(rect, RADARDISC_COLOR);
 			}
 			CRadar::DrawBlips();
@@ -1129,20 +1138,20 @@ void CHud::Draw()
 			// Yeah, top and bottom changed place. R* vision
 			if (IntroRect.m_bIsUsed && IntroRect.m_bBeforeFade) {
 				if (IntroRect.m_nTextureId >= 0) {
-					CRect rect = {
+					CRect rect (
 						IntroRect.m_sRect.left,
-						IntroRect.m_sRect.top,
+						IntroRect.m_sRect.bottom,
 						IntroRect.m_sRect.right,
-						IntroRect.m_sRect.bottom };
+						IntroRect.m_sRect.top );
 
 					CTheScripts::ScriptSprites[IntroRect.m_nTextureId].Draw(rect, IntroRect.m_sColor);
 				}
 				else {
-					CRect rect = {
+					CRect rect (
 						IntroRect.m_sRect.left,
-						IntroRect.m_sRect.top,
+						IntroRect.m_sRect.bottom,
 						IntroRect.m_sRect.right,
-						IntroRect.m_sRect.bottom };
+						IntroRect.m_sRect.top );
 
 					CSprite2d::DrawRect(rect, IntroRect.m_sColor);
 				}
@@ -1163,7 +1172,14 @@ void CHud::Draw()
 			CFont::SetBackgroundColor(CRGBA(0, 0, 0, 128));
 			CFont::SetCentreOn();
 			CFont::SetPropOn();
-			CFont::SetDropShadowPosition(0);
+#ifdef CUTSCENE_BORDERS_SWITCH
+			if (!FrontEndMenuManager.m_PrefsCutsceneBorders) {
+				CFont::SetDropColor(CRGBA(0, 0, 0, 255));
+				CFont::SetDropShadowPosition(2);
+			}
+			else
+#endif
+				CFont::SetDropShadowPosition(0);
 			CFont::SetFontStyle(FONT_LOCALE(FONT_STANDARD));
 			CFont::SetColor(CRGBA(225, 225, 225, 255));
 
@@ -1173,10 +1189,6 @@ void CHud::Draw()
 				onceItWasWidescreen = true;
 				
 				if (FrontEndMenuManager.m_PrefsShowSubtitles || !CCutsceneMgr::IsRunning()) {
-#ifdef CUTSCENE_BORDERS_SWITCH
-					if (!FrontEndMenuManager.m_PrefsCutsceneBorders)
-						CFont::SetDropShadowPosition(2);
-#endif
 					CFont::SetCentreSize(SCREEN_WIDTH - SCREEN_SCALE_X(60.0f));
 					CFont::SetScale(SCREEN_SCALE_X(0.58f), SCREEN_SCALE_Y(1.2f));
 					CFont::PrintString(SCREEN_WIDTH / 2.f, SCREEN_SCALE_FROM_BOTTOM(80.0f), m_Message);
@@ -1215,7 +1227,7 @@ void CHud::Draw()
 					m_HelpMessageDisplayTime = CMessages::GetWideStringLength(m_HelpMessage) * 0.05f + 3.0f;
 
 					if (TheCamera.m_ScreenReductionPercentage == 0.0f)
-						DMAudio.PlayFrontEndSound(SOUND_HUD_SOUND, 0);
+						DMAudio.PlayFrontEndSound(SOUND_HUD, 0);
 					break;
 				case 1:
 				case 2:
@@ -2058,7 +2070,7 @@ float CHud::DrawFadeState(DRAW_FADE_STATE fadingElement, int forceFadingIn)
 			break;
 	}
 
-	return clamp(alpha, 0.0f, 255.0f);
+	return Clamp(alpha, 0.0f, 255.0f);
 }
 
 void

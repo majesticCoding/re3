@@ -20,8 +20,6 @@
 #include "Plane.h"
 #include "MemoryHeap.h"
 
-//--MIAMI: file done
-
 CPlaneNode *pPathNodes;
 CPlaneNode *pPath2Nodes;
 CPlaneNode *pPath3Nodes;
@@ -125,7 +123,7 @@ void
 CPlane::DeleteRwObject(void)
 {
 	if(m_rwObject && RwObjectGetType(m_rwObject) == rpATOMIC){
-		m_matrix.Detach();
+		GetMatrix().Detach();
 		if(RwObjectGetType(m_rwObject) == rpATOMIC){	// useless check
 			RwFrame *f = RpAtomicGetFrame((RpAtomic*)m_rwObject);
 			RpAtomicDestroy((RpAtomic*)m_rwObject);
@@ -569,13 +567,13 @@ CPlane::ProcessControl(void)
 				m_rwObject = CModelInfo::GetModelInfo(mi->m_planeLodId)->CreateInstance();
 				POP_MEMID();
 				if(m_rwObject)
-					m_matrix.AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)));
+					GetMatrix().AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)));
 			}
 		}
 	}else if(CStreaming::HasModelLoaded(GetModelIndex())){
 		if(m_rwObject && RwObjectGetType(m_rwObject) == rpATOMIC){
 			// Get rid of LOD model
-			m_matrix.Detach();
+			GetMatrix().Detach();
 			if(m_rwObject){	// useless check
 				if(RwObjectGetType(m_rwObject) == rpATOMIC){	// useless check
 					RwFrame *f = RpAtomicGetFrame((RpAtomic*)m_rwObject);
@@ -1004,7 +1002,7 @@ CPlane::TestRocketCollision(CVector *rocketPos)
 	return false;
 }
 
-//--MIAMI: unused
+// unused
 // BUG: not in CPlane in the game
 void
 CPlane::CreateIncomingCesna(void)
@@ -1028,7 +1026,7 @@ CPlane::CreateIncomingCesna(void)
         printf("CPlane::CreateIncomingCesna(void)\n");
 }
 
-//--MIAMI: unused
+// unused
 void
 CPlane::CreateDropOffCesna(void)
 {
@@ -1051,7 +1049,7 @@ CPlane::CreateDropOffCesna(void)
         printf("CPlane::CreateDropOffCesna(void)\n");
 }
 
-//--MIAMI: all unused
+// all unused
 const CVector CPlane::FindDrugPlaneCoordinates(void) { return pDrugRunCesna->GetPosition(); }
 const CVector CPlane::FindDropOffCesnaCoordinates(void) { return pDropOffCesna->GetPosition(); }
 bool CPlane::HasCesnaLanded(void) { return CesnaMissionStatus == CESNA_STATUS_LANDED; }

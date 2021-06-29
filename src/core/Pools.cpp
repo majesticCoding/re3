@@ -14,8 +14,7 @@
 #include "Wanted.h"
 #include "World.h"
 #include "MemoryHeap.h"
-
-//--MIAMI: file done
+#include "SaveBuf.h"
 
 CCPtrNodePool *CPools::ms_pPtrNodePool;
 CEntryInfoNodePool *CPools::ms_pEntryInfoNodePool;
@@ -107,11 +106,11 @@ CPools::CheckPoolsEmpty()
 	printf("pools have been cleared\n");
 }
 
-
+// Thankfully unused, it would break the game!
 void
 CPools::MakeSureSlotInObjectPoolIsEmpty(int32 slot)
 {
-	if (ms_pObjectPool->IsFreeSlot(slot)) return;
+	if (ms_pObjectPool->GetIsFree(slot)) return;
 
 	CObject *object = ms_pObjectPool->GetSlot(slot);
 	if (object->ObjectCreatedBy == TEMP_OBJECT) {
@@ -139,15 +138,20 @@ CPools::MakeSureSlotInObjectPoolIsEmpty(int32 slot)
 void CPools::LoadVehiclePool(uint8* buf, uint32 size)
 {
 INITSAVEBUF
-	int nNumCars = ReadSaveBuf<int>(buf);
-	int nNumBoats = ReadSaveBuf<int>(buf);
-	int nNumBikes = ReadSaveBuf<int>(buf);
+	int nNumCars, nNumBoats, nNumBikes;
+	ReadSaveBuf(&nNumCars, buf);
+	ReadSaveBuf(&nNumBoats, buf);
+	ReadSaveBuf(&nNumBikes, buf);
 	for (int i = 0; i < nNumCars + nNumBoats + nNumBikes; i++) {
-		uint32 type = ReadSaveBuf<uint32>(buf);
-		int16 model = ReadSaveBuf<int16>(buf);
+		uint32 type;
+		int16 model;
+		int32 slot;
+
+		ReadSaveBuf(&type, buf);
+		ReadSaveBuf(&model, buf);
 		CStreaming::RequestModel(model, STREAMFLAGS_DEPENDENCY);
 		CStreaming::LoadAllRequestedModels(false);
-		int32 slot = ReadSaveBuf<int32>(buf);
+		ReadSaveBuf(&slot, buf);
 		CVehicle* pVehicle;
 #ifdef COMPATIBLE_SAVES
 		if (type == VEHICLE_TYPE_BOAT)
@@ -536,7 +540,7 @@ INITSAVEBUF
 #endif
 			CopyToBuf(buf, CWanted::MaximumWantedLevel);
 			CopyToBuf(buf, CWanted::nMaximumWantedLevel);
-			memcpy(buf, CModelInfo::GetModelInfo(pPed->GetModelIndex())->GetName(), MAX_MODEL_NAME);
+			memcpy(buf, CModelInfo::GetModelInfo(pPed->GetModelIndex())->GetModelName(), MAX_MODEL_NAME);
 			SkipSaveBuf(buf, MAX_MODEL_NAME);
 		}
 	}

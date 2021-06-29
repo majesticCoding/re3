@@ -61,6 +61,7 @@ public:
 	static RpAtomic *RenderVehicleHiDetailAlphaCB_BigVehicle(RpAtomic *atomic);
 	static RpAtomic *RenderVehicleHiDetailCB_Boat(RpAtomic *atomic);
 	static RpAtomic *RenderVehicleHiDetailAlphaCB_Boat(RpAtomic *atomic);
+	static RpAtomic *RenderVehicleLoDetailCB_Boat(RpAtomic *atomic);
 	static RpAtomic *RenderVehicleLowDetailCB_BigVehicle(RpAtomic *atomic);
 	static RpAtomic *RenderVehicleLowDetailAlphaCB_BigVehicle(RpAtomic *atomic);
 	static RpAtomic *RenderVehicleReallyLowDetailCB(RpAtomic *atomic);
@@ -126,7 +127,6 @@ public:
 	                                  int32 offset, int32 len);
 	static int32 ms_framePluginOffset;
 
-	// Not actually used
 	struct ClumpExt
 	{
 		ClumpVisibilityCB visibilityCB;

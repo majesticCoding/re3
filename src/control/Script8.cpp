@@ -55,7 +55,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 				((CPlayerPed*)pPed)->m_fMoveSpeed = 0.0f;
 			else
 				pPed->m_nStoredMoveState = PEDMOVE_STILL;
-			CAnimManager::AddAnimation(pPed->GetClump(), pPed->m_animGroup, ANIM_IDLE_STANCE);
+			CAnimManager::AddAnimation(pPed->GetClump(), pPed->m_animGroup, ANIM_STD_IDLE);
 			pPed->bIsPedDieAnimPlaying = false;
 		}
 		return 0;
@@ -66,8 +66,8 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 		return 0;
 	case COMMAND_WANTED_STARS_ARE_FLASHING:
 	{
-		CWanted *pWanted = CWorld::Players[CWorld::PlayerInFocus].m_pPed->m_pWanted;
-		UpdateCompareFlag(pWanted->m_nMinWantedLevel - pWanted->m_nWantedLevel > 0);
+		CWanted* pWanted = CWorld::Players[CWorld::PlayerInFocus].m_pPed->m_pWanted;
+		UpdateCompareFlag(pWanted->m_nMinWantedLevel - pWanted->GetWantedLevel() > 0);
 		return 0;
 	}
 	case COMMAND_SET_ALLOW_HURRICANES:
@@ -136,7 +136,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 		CTheScripts::ReadTextLabelFromScript(&m_nIp, key);
 		m_nIp += KEY_LENGTH_IN_SCRIPT;
 		CVector pos = pPlayerInfo->GetPos();
-		CZone *infoZone = CTheZones::FindInformationZoneForPosition(&pos);
+		CZone* infoZone = CTheZones::FindInformationZoneForPosition(&pos);
 		UpdateCompareFlag(strncmp(key, infoZone->name, 8) == 0); // original code doesn't seem to be using strncmp in here and compare 2 ints instead
 		return 0;
 	}
@@ -346,13 +346,13 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 		CollectParameters(&m_nIp, 1);
 		CPed* pPed = CPools::GetPedPool()->GetAt(ScriptParams[0]);
 		script_assert(pPed);
-		UpdateCompareFlag(RpAnimBlendClumpGetAssociation(pPed->GetClump(), ANIM_DUCK_DOWN) != nil);
+		UpdateCompareFlag(RpAnimBlendClumpGetAssociation(pPed->GetClump(), ANIM_STD_DUCK_DOWN) != nil);
 		return 0;
 	}
 	case COMMAND_CREATE_DUST_EFFECT_FOR_CUTSCENE_HELI:
 	{
 		CollectParameters(&m_nIp, 3);
-		CObject *pHeli = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
+		CObject* pHeli = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
 		bool found = false;
 		float waterLevel = -1000.0f;
 		CVector pos = pHeli->GetPosition();
@@ -387,7 +387,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 #if (defined GTAVC_JP_PATCH || defined SUPPORT_JAPANESE_SCRIPT)
 	case COMMAND_IS_JAPANESE_GAME:
 #ifdef MORE_LANGUAGES
-		UpdateCompareFlag(FrontEndMenuManager.m_PrefsLanguage == LANGUAGE_JAPANESE);
+		UpdateCompareFlag(FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_JAPANESE);
 #elif (defined GTAVC_JP_PATCH)
 		UpdateCompareFlag(true);
 #else
@@ -396,11 +396,13 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 		return 0;
 #elif (!defined GTA_PS2)
 	case COMMAND_SET_ONSCREEN_COUNTER_FLASH_WHEN_FIRST_DISPLAYED:
+	{
 		script_assert(CTheScripts::ScriptSpace[m_nIp++] == ARGUMENT_GLOBALVAR);
 		uint16 var = CTheScripts::Read2BytesFromScript(&m_nIp);
 		CollectParameters(&m_nIp, 1);
 		//CUserDisplay::OnscnTimer.SetCounterFlashWhenFirstDisplayed(var, ScriptParams[0]);
-		break;
+		return 0;
+	}
 #endif
 #if (defined GTA_PC && !defined GTAVC_JP_PATCH || defined GTA_XBOX || defined SUPPORT_XBOX_SCRIPT || defined GTA_MOBILE || defined SUPPORT_MOBILE_SCRIPT)
 	case COMMAND_SHUFFLE_CARD_DECKS:
@@ -443,7 +445,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	{
 		CollectParameters(&m_nIp, 1);
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
-		*(CVector*)ScriptParams[0] = GAME_SPEED_TO_METERS_PER_SECOND * pObject->GetMoveSpeed();
+		*(CVector*)&ScriptParams[0] = GAME_SPEED_TO_METERS_PER_SECOND * pObject->GetMoveSpeed();
 		StoreParameters(&m_nIp, 3);
 		return 0;
 	}
@@ -454,7 +456,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	{
 		CollectParameters(&m_nIp, 4);
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
-		CVector newSpeed = pObject->GetTurnSpeed() + *(CVector*)ScriptParams[1] / GAME_SPEED_TO_METERS_PER_SECOND;
+		CVector newSpeed = pObject->GetTurnSpeed() + *(CVector*)&ScriptParams[1] / GAME_SPEED_TO_METERS_PER_SECOND;
 		if (pObject->bIsStatic) {
 			pObject->SetIsStatic(false);
 			pObject->AddToMovingList();
@@ -466,7 +468,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	{
 		CollectParameters(&m_nIp, 4);
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
-		CVector newSpeed = *(CVector*)ScriptParams[1] / GAME_SPEED_TO_METERS_PER_SECOND;
+		CVector newSpeed = *(CVector*)&ScriptParams[1] / GAME_SPEED_TO_METERS_PER_SECOND;
 		if (pObject->bIsStatic) {
 			pObject->SetIsStatic(false);
 			pObject->AddToMovingList();
@@ -484,13 +486,13 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	case COMMAND_GET_ANGLE_BETWEEN_2D_VECTORS:
 	{
 		CollectParameters(&m_nIp, 4);
-		CVector2D v1 = *(CVector2D*)ScriptParams[0];
-		CVector2D v2 = *(CVector2D*)ScriptParams[2];
+		CVector2D v1 = *(CVector2D*)&ScriptParams[0];
+		CVector2D v2 = *(CVector2D*)&ScriptParams[2];
 		float c = DotProduct2D(v1, v2) / (v1.Magnitude() * v2.Magnitude());
 #ifdef FIX_BUGS // command is a SA leftover where it was fixed to this
-		*(float*)ScriptParams[0] = RADTODEG(Acos(c));
+		*(float*)&ScriptParams[0] = RADTODEG(Acos(c));
 #else
-		*(float*)ScriptParams[0] = Acos(c);
+		*(float*)&ScriptParams[0] = Acos(c);
 #endif
 		return 0;
 	}
@@ -521,7 +523,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	{
 		CollectParameters(&m_nIp, 1);
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
-		*(CVector*)ScriptParams[0] = pObject->GetTurnSpeed() * GAME_SPEED_TO_METERS_PER_SECOND;
+		*(CVector*)&ScriptParams[0] = pObject->GetTurnSpeed() * GAME_SPEED_TO_METERS_PER_SECOND;
 		StoreParameters(&m_nIp, 3);
 		return 0;
 	}
@@ -552,7 +554,7 @@ int8 CRunningScript::ProcessCommands1400To1499(int32 command)
 	{
 		CollectParameters(&m_nIp, 1);
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
-		*(float*)ScriptParams[0] = pObject->GetMoveSpeed().Magnitude() * GAME_SPEED_TO_METERS_PER_SECOND;
+		*(float*)&ScriptParams[0] = pObject->GetMoveSpeed().Magnitude() * GAME_SPEED_TO_METERS_PER_SECOND;
 		StoreParameters(&m_nIp, 1);
 		return 0;
 	}

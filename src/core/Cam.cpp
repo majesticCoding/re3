@@ -30,8 +30,6 @@
 #include "Bike.h"
 #include "Pickups.h"
 
-//--MIAMI: file done
-
 bool PrintDebugCode = false;
 int16 DebugCamMode;
 
@@ -949,7 +947,7 @@ CVector
 CCam::DoAverageOnVector(const CVector &vec)
 {
 	int i;
-	CVector Average = { 0.0f, 0.0f, 0.0f };
+	CVector Average = CVector(0.0f, 0.0f, 0.0f);
 
 	if(ResetStatics){
 		m_iRunningVectorArrayPos = 0;
@@ -1185,7 +1183,7 @@ CCam::Process_FollowPed(const CVector &CameraTarget, float TargetOrientation, fl
 
 		float ReqSpeed = DeltaBeta * SpeedMultiplier;
 		// this is also added
-		ReqSpeed = clamp(ReqSpeed, -SpeedLimit, SpeedLimit);
+		ReqSpeed = Clamp(ReqSpeed, -SpeedLimit, SpeedLimit);
 
 		// Add or subtract absolute depending on sign, genius!
 		if(ReqSpeed - BetaSpeed > 0.0f)
@@ -1680,7 +1678,7 @@ CCam::WorkOutCamHeight(const CVector &TargetCoors, float TargetOrientation, floa
 		Test.z = TargetCoors.z + 0.2f + Length*Sin(CarAlpha+AlphaOffset) + m_fCloseInCarHeightOffset;
 		if(CWorld::ProcessVerticalLine(Test, CamTargetEntity->GetPosition().z, point, entity, true, false, false, false, false, false, nil)){
 			float sin = (point.point.z - TargetCoors.z - 0.2f - m_fCloseInCarHeightOffset)/Length;
-			CarAlpha = Asin(clamp(sin, -1.0f, 1.0f)) - AlphaOffset;
+			CarAlpha = Asin(Clamp(sin, -1.0f, 1.0f)) - AlphaOffset;
 			if(CarAlpha < 0.0f)
 				AlphaOffset += CarAlpha;
 		} 
@@ -1830,7 +1828,7 @@ CCam::Process_Cam_On_A_String(const CVector &CameraTarget, float TargetOrientati
 		if(DeltaBeta > PI) DeltaBeta -= TWOPI;
 		else if(DeltaBeta < -PI) DeltaBeta += TWOPI;
 		float dist = (TargetCoors - Source).Magnitude();
-		dist = FIRETRUCK_TRACKING_MULT*dist*clamp(DeltaBeta, -0.8f, 0.8f);
+		dist = FIRETRUCK_TRACKING_MULT*dist*Clamp(DeltaBeta, -0.8f, 0.8f);
 		Source += dist*CrossProduct(Front, CVector(0.0f, 0.0f, 1.0f));
 	}
 
@@ -2803,7 +2801,7 @@ CCam::Process_1rstPersonPedOnPC(const CVector&, float TargetOrientation, float, 
 			if(BetaOffset > PI) BetaOffset -= TWOPI;
 			else if(BetaOffset < PI) BetaOffset += TWOPI;
 
-			BetaOffset = clamp(BetaOffset, -pedTarget->m_attachRotStep, pedTarget->m_attachRotStep);
+			BetaOffset = Clamp(BetaOffset, -pedTarget->m_attachRotStep, pedTarget->m_attachRotStep);
 			Beta = NewBeta + BetaOffset;
 		}
 
@@ -3273,7 +3271,7 @@ CCam::Process_BehindBoat(const CVector &CameraTarget, float TargetOrientation, f
 		// useless call
 		//CWaterLevel::GetWaterLevelNoWaves(TargetCoors.x, TargetCoors.y, TargetCoors.z, &Water);
 		Water = (WaterLevel + WATER_Z_ADDITION_MIN - WaterLevelBuffered - WATER_Z_ADDITION)/(BoatDimensions.z/2.0f + MaxHeightUp);
-		TargetAlpha = Asin(clamp(Water, -1.0f, 1.0f));
+		TargetAlpha = Asin(Clamp(Water, -1.0f, 1.0f));
 	}
 
 	if(ResetStatics){
@@ -3459,7 +3457,7 @@ FindSplinePathPositionFloat(float *out, float *spline, uint32 time, uint32 &mark
 		}
 	}
 	float a = ((float)time - (float)MS(spline[marker-4])) / (float)MS(spline[marker] - spline[marker-4]);
-	a = clamp(a, 0.0f, 1.0f);
+	a = Clamp(a, 0.0f, 1.0f);
 	float b = 1.0f - a;
 	*out =	b*b*b * spline[marker-3] +
 		3.0f*a*b*b * spline[marker-1] +
@@ -3497,7 +3495,7 @@ FindSplinePathPositionVector(CVector *out, float *spline, uint32 time, uint32 &m
 	}
 
 	float a = ((float)time - (float)MS(spline[marker-10])) / (float)MS(spline[marker] - spline[marker-10]);
-	a = clamp(a, 0.0f, 1.0f);
+	a = Clamp(a, 0.0f, 1.0f);
 	float b = 1.0f - a;
 	out->x =
 		b*b*b * spline[marker-9] +
@@ -3947,11 +3945,11 @@ CCam::Process_Debug(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 75.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 75.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -4018,11 +4016,11 @@ CCam::Process_Debug(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 75.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 75.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -4031,7 +4029,7 @@ CCam::Process_Debug(const CVector&, float, float, float)
 	if(CPad::GetPad(1)->GetLeftShockJustDown() && gbBigWhiteDebugLightSwitchedOn)
 		CShadows::StoreShadowToBeRendered(SHADOWTYPE_ADDITIVE, gpShadowExplosionTex, &Source,
 			12.0f, 0.0f, 0.0f, -12.0f,
-			128, 128, 128, 128, 1000.0f, false, 1.0f);
+			128, 128, 128, 128, 1000.0f, false, 1.0f, nil, 1.0f);
 
 	if(CHud::m_Wants_To_Draw_Hud){
 		char str[256];
@@ -4099,11 +4097,11 @@ CCam::Process_Editor(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 75.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 75.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -4346,7 +4344,7 @@ CCam::ProcessArrestCamOne(void)
 			((CPed*)TheCamera.pTargetEntity)->m_pedIK.GetComponentPosition(TargetPos, PED_MID);
 			if(FindPlayerPed() && FindPlayerPed()->m_pArrestingCop)
 				cop = FindPlayerPed()->m_pArrestingCop;
-			if(cop && CGeneral::GetRandomNumberInRange(0.0f, 0.1f) > 0.5f){
+			if(cop && CGeneral::GetRandomNumberInRange(0.0f, 1.0f) > 0.5f){
 				ArrestModes[0] = ARRESTCAM_OVERSHOULDER;
 				ArrestModes[1] = ARRESTCAM_ALONGGROUND;
 				ArrestModes[2] = ARRESTCAM_OVERSHOULDER;
@@ -4368,7 +4366,7 @@ CCam::ProcessArrestCamOne(void)
 
 			if(FindPlayerPed() && FindPlayerPed()->m_pArrestingCop)
 				cop = FindPlayerPed()->m_pArrestingCop;
-			if(cop && CGeneral::GetRandomNumberInRange(0.0f, 0.1f) > 0.65f){
+			if(cop && CGeneral::GetRandomNumberInRange(0.0f, 1.0f) > 0.65f){
 				ArrestModes[0] = ARRESTCAM_OVERSHOULDER;
 				ArrestModes[1] = ARRESTCAM_LAMPPOST;
 				ArrestModes[2] = ARRESTCAM_ALONGGROUND;
@@ -4438,6 +4436,7 @@ CCam::ProcessArrestCamOne(void)
 				pStoredCopPed = nil;
 		}
 
+		Source = CamSource;
 		CVector OrigSource = Source;
 		TheCamera.AvoidTheGeometry(OrigSource, TargetPos, Source, FOV);
 		Front = TargetPos - Source;
@@ -4464,8 +4463,9 @@ CCam::ProcessArrestCamOne(void)
 
 	if(nUsingWhichCamera == ARRESTCAM_OVERSHOULDER && pStoredCopPed){
 		foundPos = GetLookOverShoulderPos(TheCamera.pTargetEntity, pStoredCopPed, TargetPos, CamSource);
-		if(CamSource.z > Source.z + ARRESTCAM_S_ROTATION_UP*CTimer::GetTimeStep())
-			CamSource.z = Source.z + ARRESTCAM_S_ROTATION_UP*CTimer::GetTimeStep();
+		float newZ = Source.z + ARRESTCAM_S_ROTATION_UP*CTimer::GetTimeStep();
+		if(CamSource.z > newZ)
+			CamSource.z = newZ;
 	}else if(nUsingWhichCamera >= ARRESTCAM_ALONGGROUND_RIGHT && nUsingWhichCamera <= ARRESTCAM_ALONGGROUND_LEFT_UP){
 		CamSource = Source;
 		Front = TargetPos - CamSource;
@@ -4921,7 +4921,7 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 			// 0.98f: CAR_FOV_FADE_MULT
 			FOV = Pow(0.98f, CTimer::GetTimeStep()) * (FOV - DefaultFOV) + DefaultFOV;
 
-		FOV = clamp(FOV, DefaultFOV, DefaultFOV + 30.0f);
+		FOV = Clamp(FOV, DefaultFOV, DefaultFOV + 30.0f);
 	}
 
 	// WORKAROUND: I still don't know how looking behind works (m_bCamDirectlyInFront is unused in III, they seem to use m_bUseTransitionBeta)
@@ -4952,9 +4952,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 		AlphaSpeed = 0.0;
 		Distance = 1000.0;
 
-		Front.x = -(cos(Beta) * cos(Alpha));
-		Front.y = -(sin(Beta) * cos(Alpha));
-		Front.z = sin(Alpha);
+		Front.x = -(Cos(Beta) * Cos(Alpha));
+		Front.y = -(Sin(Beta) * Cos(Alpha));
+		Front.z = Sin(Alpha);
 
 		m_aTargetHistoryPosOne = TargetCoors - nextDistance * Front;
 
@@ -5040,7 +5040,7 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 					}
 				}
 
-	float targetAlpha = Asin(clamp(Front.z, -1.0f, 1.0f)) - zoomModeAlphaOffset;
+	float targetAlpha = Asin(Clamp(Front.z, -1.0f, 1.0f)) - zoomModeAlphaOffset;
 	if (targetAlpha <= maxAlphaAllowed) {
 		if (targetAlpha < -CARCAM_SET[camSetArrPos][14])
 			targetAlpha = -CARCAM_SET[camSetArrPos][14];
@@ -5058,10 +5058,14 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 
 	// Using GetCarGun(LR/UD) will give us same unprocessed RightStick value as SA
 	float stickX = -(pad->GetCarGunLeftRight());
-	float stickY = pad->GetCarGunUpDown();
+	float stickY = -pad->GetCarGunUpDown();
 
-	if (CCamera::m_bUseMouse3rdPerson)
+	// In SA this checks for m_bUseMouse3rdPerson so num2 / num8 do not move camera
+	// when Keyboard & Mouse controls are used. To make it work better with III/VC, check for actual pad state instead
+	if (!CPad::IsAffectedByController && !isCar)
 		stickY = 0.0f;
+	else if (CPad::bInvertLook4Pad)
+		stickY = -stickY;
 
 	float xMovement = Abs(stickX) * (FOV / 80.0f * 5.f / 70.f) * stickX * 0.007f * 0.007f;
 	float yMovement = Abs(stickY) * (FOV / 80.0f * 3.f / 70.f) * stickY * 0.007f * 0.007f;
@@ -5224,9 +5228,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 
 	lastBeta = Beta;
 
-	Front.x = -(cos(Beta) * cos(Alpha));
-	Front.y = -(sin(Beta) * cos(Alpha));
-	Front.z = sin(Alpha);
+	Front.x = -(Cos(Beta) * Cos(Alpha));
+	Front.y = -(Sin(Beta) * Cos(Alpha));
+	Front.z = Sin(Alpha);
 	GetVectorsReadyForRW();
 	TheCamera.m_bCamDirectlyBehind = false;
 	TheCamera.m_bCamDirectlyInFront = false;
@@ -5236,9 +5240,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 	m_cvecTargetCoorsForFudgeInter = TargetCoors;
 	m_aTargetHistoryPosThree = m_aTargetHistoryPosOne;
 	float nextAlpha = alphaWithSpeedAccounted + zoomModeAlphaOffset;
-	float nextFrontX = -(cos(Beta) * cos(nextAlpha));
-	float nextFrontY = -(sin(Beta) * cos(nextAlpha));
-	float nextFrontZ = sin(nextAlpha);
+	float nextFrontX = -(Cos(Beta) * Cos(nextAlpha));
+	float nextFrontY = -(Sin(Beta) * Cos(nextAlpha));
+	float nextFrontZ = Sin(nextAlpha);
 
 	m_aTargetHistoryPosOne.x = TargetCoors.x - nextFrontX * nextDistance;
 	m_aTargetHistoryPosOne.y = TargetCoors.y - nextFrontY * nextDistance;
@@ -5391,7 +5395,7 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 
 			float alphaToFace = Atan2(hi.z, hi.Magnitude2D()) + DEGTORAD(15.0f);
 			float neededAlphaTurn = alphaToFace - carGunUD;
-			float alphaTurnPerFrame = CTimer::GetTimeStep() * 0.02f;
+			float alphaTurnPerFrame = CTimer::GetTimeStepInSeconds();
 
 			if (neededAlphaTurn > alphaTurnPerFrame) {
 				neededTurn = alphaTurnPerFrame;

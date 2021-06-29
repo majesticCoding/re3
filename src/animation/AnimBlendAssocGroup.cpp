@@ -1,7 +1,11 @@
 #include "common.h"
 
 #if defined _WIN32 && !defined __MINGW32__
+#if defined __MWERKS__
+#include <wctype.h>
+#else
 #include "ctype.h"
+#endif
 #else
 #include <cwctype>
 #endif
@@ -14,8 +18,6 @@
 #include "RpAnimBlend.h"
 #include "AnimBlendAssociation.h"
 #include "AnimBlendAssocGroup.h"
-
-//--MIAMI: file done
 
 CAnimBlendAssocGroup::CAnimBlendAssocGroup(void)
 {
@@ -90,18 +92,18 @@ strcmpIgnoringDigits(const char *s1, const char *s2)
 		if(c1) s1++;
 		if(c2) s2++;
 		if(c1 == '\0' && c2 == '\0') return true;
-#if defined _WIN32 && !defined __MINGW32__
-		if(__ascii_iswdigit(c1) && __ascii_iswdigit(c2))
-#else
+#ifndef ASCII_STRCMP
 		if(iswdigit(c1) && iswdigit(c2))
+#else
+		if(__ascii_iswdigit(c1) && __ascii_iswdigit(c2))
 #endif
 			continue;
-#if defined _WIN32 && !defined __MINGW32__
-		c1 = __ascii_toupper(c1);
-		c2 = __ascii_toupper(c2);
-#else
+#ifndef ASCII_STRCMP
 		c1 = toupper(c1);
 		c2 = toupper(c2);
+#else
+		c1 = __ascii_toupper(c1);
+		c2 = __ascii_toupper(c2);
 #endif
 
 		if(c1 && c2 && c1 != c2)
@@ -117,8 +119,8 @@ GetModelFromName(const char *name)
 	char playername[32];
 
 	if(strncasecmp(name, "CSplay", 6) == 0 &&
-	   strncasecmp(CModelInfo::GetModelInfo(MI_PLAYER)->GetName(), "ig", 2) == 0){
-		strcpy(playername, CModelInfo::GetModelInfo(MI_PLAYER)->GetName());
+	   strncasecmp(CModelInfo::GetModelInfo(MI_PLAYER)->GetModelName(), "ig", 2) == 0){
+		strcpy(playername, CModelInfo::GetModelInfo(MI_PLAYER)->GetModelName());
 		playername[0] = 'C';
 		playername[1] = 'S';
 		name = playername;
@@ -127,7 +129,7 @@ GetModelFromName(const char *name)
 	for(i = 0; i < MODELINFOSIZE; i++){
 		mi = CModelInfo::GetModelInfo(i);
 		if(mi && mi->GetRwObject() && RwObjectGetType(mi->GetRwObject()) == rpCLUMP &&
-		   strcmpIgnoringDigits(mi->GetName(), name))
+		   strcmpIgnoringDigits(mi->GetModelName(), name))
 			return mi;
 	}
 	return nil;
@@ -149,7 +151,7 @@ CAnimBlendAssocGroup::CreateAssociations(const char *name)
 		CAnimBlendHierarchy *anim = CAnimManager::GetAnimation(animBlock->firstIndex + i);
 		CBaseModelInfo *model = GetModelFromName(anim->name);
 		if(model){
-			debug("Associated anim %s with model %s\n", anim->name, model->GetName());
+			debug("Associated anim %s with model %s\n", anim->name, model->GetModelName());
 			RpClump *clump = (RpClump*)model->CreateInstance();
 			RpAnimBlendClumpInit(clump);
 			assocList[i].Init(clump, anim);

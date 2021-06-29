@@ -23,6 +23,7 @@
 #include "World.h"
 #include "Replay.h"
 #include "Coronas.h"
+#include "SaveBuf.h"
 
 CPlaneTrail CPlaneTrails::aArray[6];
 RwImVertexIndex TrailIndices[32] = {
@@ -459,6 +460,7 @@ void CMovingThings::Update()
 
 void CMovingThings::Render()
 {
+	PUSH_RENDERGROUP("CMovingThings::Render");
 	CSmokeTrails::Update();
 
 	int i;
@@ -471,6 +473,7 @@ void CMovingThings::Render()
 	CPlaneTrails::Render();
 	CSmokeTrails::Render();
 	CPlaneBanners::Render();
+	POP_RENDERGROUP();
 }
 
 void CMovingThings::RegisterOne(CEntity *pEnt, uint16 nType) {
@@ -935,7 +938,7 @@ CEscalator::AddThisOne(CVector pos0, CVector pos1, CVector pos2, CVector pos3, b
 	m_lowerEnd = magnitudes[0] / length;
 	m_upperEnd = (magnitudes[0] + magnitudes[1]) / length;
 
-	m_stepsCount = Max(24.0f, length / 0.6f);
+	m_stepsCount = Min(24.0f, length / 0.6f);
 
 	CVector direction(m_pos0.x - m_pos1.x, m_pos0.y - m_pos1.y, 0.0f);
 	direction.Normalise();
@@ -1152,7 +1155,7 @@ void CScriptPath::Update(void) {
 		return;
 
 	m_fPosition += m_fSpeed * CTimer::GetTimeStepInSeconds();
-	m_fPosition = clamp(m_fPosition, 0.0f, m_fTotalLength);
+	m_fPosition = Clamp(m_fPosition, 0.0f, m_fTotalLength);
 
 	if (m_pObjects[0] || m_pObjects[1] || m_pObjects[2] || m_pObjects[3]
 		|| m_pObjects[4] || m_pObjects[5]) {
@@ -1265,7 +1268,7 @@ INITSAVEBUF
 		aArray[i].Clear();
 
 	for (int32 i = 0; i < 3; i++) {
-		aArray[i] = ReadSaveBuf<CScriptPath>(buf);
+		ReadSaveBuf(&aArray[i], buf);
 
 		for (int32 j = 0; j < 6; j++) {
 			CScriptPath *pPath = &aArray[i];
@@ -1277,7 +1280,7 @@ INITSAVEBUF
 
 		aArray[i].m_pNode = new CPlaneNode[aArray[i].m_numNodes];
 		for (int32 j = 0; j < aArray[i].m_numNodes; j++) {
-			aArray[i].m_pNode[j] = ReadSaveBuf<CPlaneNode>(buf);
+			ReadSaveBuf(&aArray[i].m_pNode[j], buf);
 		}
 	}
 VALIDATESAVEBUF(size)

@@ -73,7 +73,7 @@ RwRaster *gpWaterEnvBaseRaster;
 RwRaster *gpWaterWakeRaster;
 
 bool _bSeaLife;
-float _fWaterZOffset = 0.5f;
+float _fWaterZOffset = WATER_Z_OFFSET;
 
 #ifdef PC_WATER
 float fEnvScale               = 0.25f;
@@ -113,9 +113,9 @@ float fMinWaterAlphaMult      = -30.0f;
 
 
 void
-WaterLevelInitialise(Const char *pWaterDat)
+CWaterLevel::Initialise(Const char *pWaterDat)
 {
-	CWaterLevel::ms_nNoOfWaterLevels = 0;
+	ms_nNoOfWaterLevels = 0;
 	
 #ifdef MASTER
 	int32 hFile = -1;
@@ -131,11 +131,11 @@ WaterLevelInitialise(Const char *pWaterDat)
 	
 	if (hFile > 0)
 	{
-		CFileMgr::Read(hFile, (char *)&CWaterLevel::ms_nNoOfWaterLevels, sizeof(CWaterLevel::ms_nNoOfWaterLevels));
-		CFileMgr::Read(hFile, (char *)CWaterLevel::ms_aWaterZs,	sizeof(CWaterLevel::ms_aWaterZs));
-		CFileMgr::Read(hFile, (char *)CWaterLevel::ms_aWaterRects, sizeof(CWaterLevel::ms_aWaterRects));
-		CFileMgr::Read(hFile, (char *)CWaterLevel::aWaterBlockList, sizeof(CWaterLevel::aWaterBlockList));
-		CFileMgr::Read(hFile, (char *)CWaterLevel::aWaterFineBlockList, sizeof(CWaterLevel::aWaterFineBlockList));
+		CFileMgr::Read(hFile, (char *)&ms_nNoOfWaterLevels, sizeof(ms_nNoOfWaterLevels));
+		CFileMgr::Read(hFile, (char *)ms_aWaterZs,	sizeof(ms_aWaterZs));
+		CFileMgr::Read(hFile, (char *)ms_aWaterRects, sizeof(ms_aWaterRects));
+		CFileMgr::Read(hFile, (char *)aWaterBlockList, sizeof(aWaterBlockList));
+		CFileMgr::Read(hFile, (char *)aWaterFineBlockList, sizeof(aWaterFineBlockList));
 		CFileMgr::CloseFile(hFile);
 	}
 #ifndef MASTER
@@ -157,7 +157,7 @@ WaterLevelInitialise(Const char *pWaterDat)
 			{
 				float z, l, b, r, t;
 				sscanf(line, "%f %f %f %f %f", &z, &l, &b, &r, &t);
-				CWaterLevel::AddWaterLevel(l, b, r, t, z);
+				AddWaterLevel(l, b, r, t, z);
 			}
 		}
 
@@ -167,28 +167,28 @@ WaterLevelInitialise(Const char *pWaterDat)
 		{
 			for (int32 y = 0; y < MAX_SMALL_SECTORS; y++)
 			{
-				CWaterLevel::aWaterFineBlockList[x][y] = NO_WATER;
+				aWaterFineBlockList[x][y] = NO_WATER;
 			}
 		}
 
 		// rasterize water rects read from file
-		for (int32 i = 0; i < CWaterLevel::ms_nNoOfWaterLevels; i++)
+		for (int32 i = 0; i < ms_nNoOfWaterLevels; i++)
 		{
-			int32 l = WATER_HUGE_X(CWaterLevel::ms_aWaterRects[i].left + WATER_X_OFFSET);
-			int32 r = WATER_HUGE_X(CWaterLevel::ms_aWaterRects[i].right + WATER_X_OFFSET) + 1.0f;
-			int32 t = WATER_HUGE_Y(CWaterLevel::ms_aWaterRects[i].top);
-			int32 b = WATER_HUGE_Y(CWaterLevel::ms_aWaterRects[i].bottom) + 1.0f;
+			int32 l = WATER_HUGE_X(ms_aWaterRects[i].left + WATER_X_OFFSET);
+			int32 r = WATER_HUGE_X(ms_aWaterRects[i].right + WATER_X_OFFSET) + 1.0f;
+			int32 t = WATER_HUGE_Y(ms_aWaterRects[i].top);
+			int32 b = WATER_HUGE_Y(ms_aWaterRects[i].bottom) + 1.0f;
 
-			l = clamp(l, 0, MAX_SMALL_SECTORS - 1);
-			r = clamp(r, 0, MAX_SMALL_SECTORS - 1);
-			t = clamp(t, 0, MAX_SMALL_SECTORS - 1);
-			b = clamp(b, 0, MAX_SMALL_SECTORS - 1);
+			l = Clamp(l, 0, MAX_SMALL_SECTORS - 1);
+			r = Clamp(r, 0, MAX_SMALL_SECTORS - 1);
+			t = Clamp(t, 0, MAX_SMALL_SECTORS - 1);
+			b = Clamp(b, 0, MAX_SMALL_SECTORS - 1);
 
 			for (int32 x = l; x <= r; x++)
 			{
 				for (int32 y = t; y <= b; y++)
 				{
-					CWaterLevel::aWaterFineBlockList[x][y] = i;
+					aWaterFineBlockList[x][y] = i;
 				}
 			}
 		}
@@ -209,10 +209,10 @@ WaterLevelInitialise(Const char *pWaterDat)
 					{
 						for (int32 j = 0; j <= 8; j++)
 						{
-							CVector worldPos = CVector(worldX + i * (SMALL_SECTOR_SIZE / 8), worldY + j * (SMALL_SECTOR_SIZE / 8), CWaterLevel::ms_aWaterZs[CWaterLevel::aWaterFineBlockList[x][y]]);
+							CVector worldPos = CVector(worldX + i * (SMALL_SECTOR_SIZE / 8), worldY + j * (SMALL_SECTOR_SIZE / 8), ms_aWaterZs[aWaterFineBlockList[x][y]]);
 
 							if ((worldPos.x > WORLD_MIN_X && worldPos.x < WORLD_MAX_X) && (worldPos.y > WORLD_MIN_Y && worldPos.y < WORLD_MAX_Y) &&
-								(!CWaterLevel::WaterLevelAccordingToRectangles(worldPos.x, worldPos.y) || CWaterLevel::TestVisibilityForFineWaterBlocks(worldPos)))
+								(!WaterLevelAccordingToRectangles(worldPos.x, worldPos.y) || TestVisibilityForFineWaterBlocks(worldPos)))
 								continue;
 
 							// at least one point in the tile wasn't blocked, so don't remove water
@@ -222,37 +222,37 @@ WaterLevelInitialise(Const char *pWaterDat)
 					}
 
 					if (i < 1000)
-						CWaterLevel::aWaterFineBlockList[x][y] = NO_WATER;
+						aWaterFineBlockList[x][y] = NO_WATER;
 				}
 			}
 		}
 
-		CWaterLevel::RemoveIsolatedWater();
+		RemoveIsolatedWater();
 
 		// calculate coarse tiles from fine tiles
 		for (int32 x = 0; x < MAX_LARGE_SECTORS; x++)
 		{
 			for (int32 y = 0; y < MAX_LARGE_SECTORS; y++)
 			{
-				if (CWaterLevel::aWaterFineBlockList[x * 2][y * 2] >= 0)
+				if (aWaterFineBlockList[x * 2][y * 2] >= 0)
 				{
-					CWaterLevel::aWaterBlockList[x][y] = CWaterLevel::aWaterFineBlockList[x * 2][y * 2];
+					aWaterBlockList[x][y] = aWaterFineBlockList[x * 2][y * 2];
 				}
-				else if (CWaterLevel::aWaterFineBlockList[x * 2 + 1][y * 2] >= 0)
+				else if (aWaterFineBlockList[x * 2 + 1][y * 2] >= 0)
 				{
-					CWaterLevel::aWaterBlockList[x][y] = CWaterLevel::aWaterFineBlockList[x * 2 + 1][y * 2];
+					aWaterBlockList[x][y] = aWaterFineBlockList[x * 2 + 1][y * 2];
 				}
-				else if (CWaterLevel::aWaterFineBlockList[x * 2][y * 2 + 1] >= 0)
+				else if (aWaterFineBlockList[x * 2][y * 2 + 1] >= 0)
 				{
-					CWaterLevel::aWaterBlockList[x][y] = CWaterLevel::aWaterFineBlockList[x * 2][y * 2 + 1];
+					aWaterBlockList[x][y] = aWaterFineBlockList[x * 2][y * 2 + 1];
 				}
-				else if (CWaterLevel::aWaterFineBlockList[x * 2 + 1][y * 2 + 1] >= 0)
+				else if (aWaterFineBlockList[x * 2 + 1][y * 2 + 1] >= 0)
 				{
-					CWaterLevel::aWaterBlockList[x][y] = CWaterLevel::aWaterFineBlockList[x * 2 + 1][y * 2 + 1];
+					aWaterBlockList[x][y] = aWaterFineBlockList[x * 2 + 1][y * 2 + 1];
 				}
 				else
 				{
-					CWaterLevel::aWaterBlockList[x][y] = NO_WATER;
+					aWaterBlockList[x][y] = NO_WATER;
 				}
 			}
 		}
@@ -261,11 +261,11 @@ WaterLevelInitialise(Const char *pWaterDat)
 
 		if (hFile > 0)
 		{
-			CFileMgr::Write(hFile, (char *)&CWaterLevel::ms_nNoOfWaterLevels, sizeof(CWaterLevel::ms_nNoOfWaterLevels));
-			CFileMgr::Write(hFile, (char *)CWaterLevel::ms_aWaterZs, sizeof(CWaterLevel::ms_aWaterZs));
-			CFileMgr::Write(hFile, (char *)CWaterLevel::ms_aWaterRects, sizeof(CWaterLevel::ms_aWaterRects));
-			CFileMgr::Write(hFile, (char *)CWaterLevel::aWaterBlockList, sizeof(CWaterLevel::aWaterBlockList));
-			CFileMgr::Write(hFile, (char *)CWaterLevel::aWaterFineBlockList, sizeof(CWaterLevel::aWaterFineBlockList));
+			CFileMgr::Write(hFile, (char *)&ms_nNoOfWaterLevels, sizeof(ms_nNoOfWaterLevels));
+			CFileMgr::Write(hFile, (char *)ms_aWaterZs, sizeof(ms_aWaterZs));
+			CFileMgr::Write(hFile, (char *)ms_aWaterRects, sizeof(ms_aWaterRects));
+			CFileMgr::Write(hFile, (char *)aWaterBlockList, sizeof(aWaterBlockList));
+			CFileMgr::Write(hFile, (char *)aWaterFineBlockList, sizeof(aWaterFineBlockList));
 
 			CFileMgr::CloseFile(hFile);
 		}
@@ -300,7 +300,7 @@ WaterLevelInitialise(Const char *pWaterDat)
 	
 	CTxdStore::PopCurrentTxd();
 
-	CWaterLevel::CreateWavyAtomic();
+	CreateWavyAtomic();
 	
 	printf("Done Initing waterlevels\n");
 }
@@ -318,6 +318,7 @@ CWaterLevel::Shutdown()
 
 	_DELETE_TEXTURE(gpWaterTex);
 	_DELETE_TEXTURE(gpWaterEnvTex);
+	_DELETE_TEXTURE(gpWaterWakeTex);
 	_DELETE_TEXTURE(gpWaterEnvBaseTex);
 
 #undef _DELETE_TEXTURE
@@ -610,14 +611,14 @@ CWaterLevel::TestVisibilityForFineWaterBlocks(const CVector &worldPos)
 
 		if ((lineEnd.x > WORLD_MIN_X && lineEnd.x < WORLD_MAX_X) && (lineEnd.y > WORLD_MIN_Y && lineEnd.y < WORLD_MAX_Y))
 		{
-			if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false, nil))
+			if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false))
 			{
 				lineStart.x += 0.4f;
 				lineStart.y += 0.4f;
 				lineEnd.x += 0.4f;
 				lineEnd.y += 0.4f;
 
-				if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false, nil))
+				if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false))
 				{
 					return false;
 				}
@@ -714,9 +715,9 @@ CWaterLevel::GetWaterLevel(float fX, float fY, float fZ, float *pfOutLevel, bool
 	if ( y < 0 || y >= MAX_SMALL_SECTORS ) return false;
 #endif
 
-	uint8 nBlock = aWaterFineBlockList[x][y];
+	int8 nBlock = aWaterFineBlockList[x][y];
 
-	if ( nBlock == 0x80 )
+	if ( nBlock == NO_WATER )
 		return false;
 
 	ASSERT( pfOutLevel != nil );
@@ -756,9 +757,9 @@ CWaterLevel::GetWaterLevelNoWaves(float fX, float fY, float fZ, float *pfOutLeve
 	if ( y < 0 || y >= MAX_SMALL_SECTORS ) return false;
 #endif
 	
-	uint8 nBlock = aWaterFineBlockList[x][y];
+	int8 nBlock = aWaterFineBlockList[x][y];
 		
-	if ( nBlock == 0x80 )
+	if ( nBlock == NO_WATER )
 		return false;
 	
 	ASSERT( pfOutLevel != nil );
@@ -990,10 +991,10 @@ CWaterLevel::RenderWater()
 	if ( bUseCamEndY )                             
 		nEndY   = WATER_TO_HUGE_SECTOR_Y(camPos.y);
 
-	nStartX = clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
-	nEndX   = clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
-	nStartY = clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
-	nEndY   = clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
+	nStartX = Clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
+	nEndX   = Clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
+	nStartY = Clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
+	nEndY   = Clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
 	
 	for ( int32 x = nStartX; x <= nEndX; x++ )
 	{
@@ -1013,7 +1014,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fHugeSectorMaxRenderDistSqr > fHugeSectorDistToCamSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE)) )
 					{
 #ifndef PC_WATER
 						WavesCalculatedThisFrame = true;
@@ -1076,7 +1077,7 @@ CWaterLevel::RenderWater()
 	{
 		for ( int32 y = 0; y < 5; y++ )
 		{
-			float fX = WATER_SIGN_X(float(x) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f - 400.0f;
+			float fX = WATER_SIGN_X(float(x) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f - WATER_X_OFFSET;
 			float fY = WATER_SIGN_Y(float(y) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f;
 			
 			if ( !bUseCamStartY )
@@ -1087,7 +1088,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1106,7 +1107,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1135,7 +1136,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1154,7 +1155,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.x, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.x, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1201,6 +1202,8 @@ CWaterLevel::RenderTransparentWater(void)
 	if ( !CGame::CanSeeWaterFromCurrArea() )
 		return;
 	
+	PUSH_RENDERGROUP("CWaterLevel::RenderTransparentWater");
+
 	float fWaterDrawDist      = _GetWavyDrawDist();
 	float fWaterDrawDistLarge = fWaterDrawDist + 90.0f;
 	float fWavySectorMaxRenderDistSqr   = SQR(fWaterDrawDist);
@@ -1256,10 +1259,10 @@ CWaterLevel::RenderTransparentWater(void)
 	if ( bUseCamEndY )                                      
 		nEndY   = WATER_TO_HUGE_SECTOR_Y(camPos.y         );
 	
-	nStartX = clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
-	nEndX   = clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
-	nStartY = clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
-	nEndY   = clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
+	nStartX = Clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
+	nEndX   = Clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
+	nStartY = Clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
+	nEndY   = Clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
 	
 	
 	for ( int32 x = nStartX; x <= nEndX; x++ )
@@ -1284,7 +1287,7 @@ CWaterLevel::RenderTransparentWater(void)
 				
 				if ( fHugeSectorMaxRenderDistSqr > fHugeSectorDistToCamSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE)) )
 					{
 						if ( fHugeSectorDistToCamSqr >= SQR(500.0f) )
 						{
@@ -1308,7 +1311,7 @@ CWaterLevel::RenderTransparentWater(void)
 										
 										if ( fLargeSectorDistToCamSqr < fHugeSectorMaxRenderDistSqr )
 										{
-											if ( TheCamera.IsSphereVisible(CVector(vecLargeSectorCentre.x, vecLargeSectorCentre.y, 0.0f), SectorRadius(LARGE_SECTOR_SIZE), &TheCamera.GetCameraMatrix()) )
+											if ( TheCamera.IsSphereVisible(CVector(vecLargeSectorCentre.x, vecLargeSectorCentre.y, 0.0f), SectorRadius(LARGE_SECTOR_SIZE)) )
 											{
 												// Render four small(32x32) sectors, or one large(64x64).
 
@@ -1462,7 +1465,7 @@ CWaterLevel::RenderTransparentWater(void)
 
 		int32 nBlock;
 
-		int32 BlockX = WATER_TO_SMALL_SECTOR_X(fCamX + 400.0f) + 1;
+		int32 BlockX = WATER_TO_SMALL_SECTOR_X(fCamX + WATER_X_OFFSET) + 1;
 		int32 BlockY = WATER_TO_SMALL_SECTOR_Y(fCamY) + 1;
 
 		if (_IsColideWithBlock(BlockX, BlockY, nBlock))
@@ -1472,7 +1475,7 @@ CWaterLevel::RenderTransparentWater(void)
 				float fMaskX = Floor(fCamX / 2.0f) * 2.0f;
 				float fMaskY = Floor(fCamY / 2.0f) * 2.0f;
 				float fWaterZ = CWaterLevel::ms_aWaterZs[nBlock];
-				float fSectorX = WATER_FROM_SMALL_SECTOR_X(BlockX) - 400.0f;
+				float fSectorX = WATER_FROM_SMALL_SECTOR_X(BlockX) - WATER_X_OFFSET;
 				float fSectorY = WATER_FROM_SMALL_SECTOR_Y(BlockY);
 
 				RenderWavyMask(fMaskX, fMaskY, fWaterZ,
@@ -1484,6 +1487,8 @@ CWaterLevel::RenderTransparentWater(void)
 
 	DefinedState();
 #endif
+
+	POP_RENDERGROUP();
 }
 
 void CWaterLevel::RenderOneFlatSmallWaterPoly(float fX, float fY, float fZ, RwRGBA const &color)
@@ -2156,10 +2161,10 @@ CWaterLevel::PreCalcWaterGeometry(void)
 	float signX = CamFwdDir.x * 1.4144272f;
 	float signY = CamFwdDir.y * 1.4144272f;
 	
-	signX = clamp(signX, -1.0f, 1.0f);
+	signX = Clamp(signX, -1.0f, 1.0f);
 	fCamX += 0.4f * signX * float(SMALL_SECTOR_SIZE * 2.0f);
 
-	signY = clamp(signY, -1.0f, 1.0f);
+	signY = Clamp(signY, -1.0f, 1.0f);
 	fCamY += 0.4f * signY * float(SMALL_SECTOR_SIZE * 2.0f);
 	
 	int32 nBlock;
@@ -2573,7 +2578,7 @@ CWaterLevel::RenderBoatWakes(void)
 				float val = 500.0f - (CBoat::WAKE_LIFETIME - pBoat->m_afWakePointLifeTime[wake])
 						* 600.0f / CBoat::WAKE_LIFETIME;
 						
-				fAplhaB = clamp(val, 0.0f, 255.0f);
+				fAplhaB = Clamp(val, 0.0f, 255.0f);
 			}
 
 			CVector2D vecDistB = pBoat->m_avec2dWakePoints[wake - 1] - pBoat->m_avec2dWakePoints[wake];
@@ -2883,10 +2888,10 @@ CWaterLevel::CalcDistanceToWater(float fX, float fY)
 	int32 nStartY = WATER_TO_SMALL_SECTOR_Y(fY - fSectorMaxRenderDist) - 1;
 	int32 nEndY   = WATER_TO_SMALL_SECTOR_Y(fY + fSectorMaxRenderDist) + 1;
 	
-	nStartX = clamp(nStartX, 0, MAX_SMALL_SECTORS - 1);
-	nEndX   = clamp(nEndX,   0, MAX_SMALL_SECTORS - 1);
-	nStartY = clamp(nStartY, 0, MAX_SMALL_SECTORS - 1);
-	nEndY   = clamp(nEndY,   0, MAX_SMALL_SECTORS - 1);
+	nStartX = Clamp(nStartX, 0, MAX_SMALL_SECTORS - 1);
+	nEndX   = Clamp(nEndX,   0, MAX_SMALL_SECTORS - 1);
+	nStartY = Clamp(nStartY, 0, MAX_SMALL_SECTORS - 1);
+	nEndY   = Clamp(nEndY,   0, MAX_SMALL_SECTORS - 1);
 	
 	float fDistSqr = 1.0e10f;
 	
@@ -2910,7 +2915,7 @@ CWaterLevel::CalcDistanceToWater(float fX, float fY)
 		}
 	}
 
-	return clamp(Sqrt(fDistSqr) - 23.0f, 0.0f, fSectorMaxRenderDist);
+	return Clamp(Sqrt(fDistSqr) - 23.0f, 0.0f, fSectorMaxRenderDist);
 }
 
 void
@@ -3192,7 +3197,7 @@ CWaterLevel::HandleBeachToysStuff(void)
 					vecPos.x += (fCos - fSin) * fAngle;
 					vecPos.y += (fSin + fCos) * fAngle;
 					
-					if ( TheCamera.IsSphereVisible(vecPos, 1.0f, &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(vecPos, 1.0f) )
 					{
 						float fWaterLevel;
 						
@@ -3236,7 +3241,7 @@ CWaterLevel::HandleBeachToysStuff(void)
 					vecPos.x += (fCos - fSin) * fAngle;
 					vecPos.y += (fSin + fCos) * fAngle;
 					
-					if ( TheCamera.IsSphereVisible(vecPos, 2.0f, &TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(vecPos, 2.0f) )
 					{
 						float fWaterLevel;
 						

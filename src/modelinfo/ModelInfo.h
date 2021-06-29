@@ -1,14 +1,13 @@
 #pragma once
 
 #include "2dEffect.h"
-#include "BaseModelInfo.h"
 #include "SimpleModelInfo.h"
 #include "TimeModelInfo.h"
 #include "WeaponModelInfo.h"
 #include "ClumpModelInfo.h"
 #include "PedModelInfo.h"
 #include "VehicleModelInfo.h"
-#include "Instance.h"
+#include "templates.h"
 
 class CModelInfo
 {
@@ -39,6 +38,9 @@ public:
 		return ms_modelInfoPtrs[id];
 	}
 	static CBaseModelInfo *GetModelInfo(const char *name, int minIndex, int maxIndex);
+	static CColModel *GetColModel(int id){
+		return ms_modelInfoPtrs[id]->GetColModel();
+	}
 
 	static bool IsBoatModel(int32 id);
 	static bool IsBikeModel(int32 id);

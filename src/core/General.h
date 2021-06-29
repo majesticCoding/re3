@@ -2,8 +2,6 @@
 
 #include <ctype.h>
 
-// --MIAMI: file done
-
 class CGeneral
 {
 public:
@@ -58,7 +56,7 @@ public:
 
 	static float LimitRadianAngle(float angle)
 	{
-		float result = clamp(angle, -25.0f, 25.0f);
+		float result = Clamp(angle, -25.0f, 25.0f);
 
 		while (result >= PI) {
 			result -= 2 * PI;
@@ -135,7 +133,7 @@ public:
 	static bool faststricmp(const char *str1, const char *str2)
 	{
 		for (; *str1; str1++, str2++) {
-#if MUCH_SLOWER || !defined _WIN32 || defined __MINGW32__
+#ifndef ASCII_STRCMP
 			if (toupper(*str1) != toupper(*str2))
 #else
 			if (__ascii_toupper(*str1) != __ascii_toupper(*str2))

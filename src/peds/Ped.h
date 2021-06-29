@@ -9,8 +9,8 @@
 #include "Physical.h"
 #include "Weapon.h"
 #include "WeaponInfo.h"
-#include "AnimationId.h"
 #include "PathFind.h"
+#include "Collision.h"
 
 #define FEET_OFFSET	1.04f
 #define CHECK_NEARBY_THINGS_MAX_DIST	15.0f
@@ -492,10 +492,15 @@ public:
 	uint32 bDonePositionOutOfCollision : 1;
 	uint32 bCanAttackPlayerWithCops : 1;
 
+#ifdef KANGAROO_CHEAT
 	// our own flags
 	uint32 m_ped_flagI80 : 1; // KANGAROO_CHEAT define makes use of this as cheat toggle 
+#endif
 
 	uint8 m_gangFlags;
+	uint8 m_unused15D; // these 3 can't be padding but had to actually have been members ...
+	uint8 m_unused15E;
+	uint8 m_unused15F;
 	uint8 CharCreatedBy;
 	eObjective m_objective;
 	eObjective m_prevObjective;
@@ -536,7 +541,7 @@ public:
 	uint32 m_pathNodeTimer;
 	CPathNode m_pathNodeObjPool[8];
 	CPathNode* m_pCurPathNode;
-	char m_nPathDir;
+	int8 m_nPathDir;
 	CPathNode* m_pLastPathNode;
 	CPathNode* m_pNextPathNode;
 	CVector m_followPathDestPos;
@@ -554,7 +559,7 @@ public:
 	float m_fRotationCur;
 	float m_fRotationDest;
 	float m_headingRate;
-	uint16 m_vehEnterType;
+	uint16 m_vehDoor;
 	int16 m_walkAroundType;
 	CPhysical *m_pCurrentPhysSurface;
 	CVector m_vecOffsetFromPhysSurface;
@@ -608,10 +613,10 @@ public:
 	uint32 m_leaveCarTimer;
 	uint32 m_getUpTimer;
 	uint32 m_lookTimer;
-	uint32 m_standardTimer;
+	uint32 m_chatTimer;
 	uint32 m_attackTimer;
 	uint32 m_shootTimer; // shooting is a part of attack
-	uint32 m_hitRecoverTimer;
+	uint32 m_carJackTimer;
 	uint32 m_objectiveTimer;
 	uint32 m_duckTimer;
 	uint32 m_duckAndCoverTimer;
@@ -634,7 +639,7 @@ public:
 	uint32 m_threatFlags;
 	uint32 m_threatCheckTimer;
 	uint32 m_threatCheckInterval;
-	uint32 m_delayedSoundID;
+	int32 m_delayedSoundID;
 	uint32 m_delayedSoundTimer;
 	uint32 m_lastSoundStart;
 	uint32 m_soundStart;
@@ -645,10 +650,10 @@ public:
 	CVector m_vecSpotToGuard;
 	float m_radiusToGuard;
 
-	static void *operator new(size_t);
-	static void *operator new(size_t, int);
-	static void operator delete(void*, size_t);
-	static void operator delete(void*, int);
+	static void *operator new(size_t) throw();
+	static void *operator new(size_t, int) throw();
+	static void operator delete(void*, size_t) throw();
+	static void operator delete(void*, int) throw();
 
 	CPed(uint32 pedType);
 	~CPed(void);
@@ -674,7 +679,7 @@ public:
 	void SetLookFlag(CEntity* target, bool keepTryingToLook, bool cancelPrevious = false);
 	void SetLookFlag(float direction, bool keepTryingToLook, bool cancelPrevious = false);
 	void SetLookTimer(int time);
-	void SetDie(AnimationId anim = ANIM_KO_SHOT_FRONT1, float arg1 = 4.0f, float arg2 = 0.0f);
+	void SetDie(AnimationId anim = ANIM_STD_KO_FRONT, float arg1 = 4.0f, float arg2 = 0.0f);
 	void SetDead(void);
 	void ApplyHeadShot(eWeaponType weaponType, CVector pos, bool evenOnPlayer);
 	void RemoveBodyPart(PedNode nodeId, int8 direction);
@@ -1021,14 +1026,14 @@ public:
 		else if (weapon->IsFlagSet(WEAPONFLAG_GROUND_3RD))
 			return ANIM_WEAPON_FIRE_3RD;
 		else if (kickFloorIfNone)
-			return ANIM_KICK_FLOOR;
+			return ANIM_STD_KICKGROUND;
 		else
 			return (AnimationId)0;
 	}
 
 	static AnimationId GetPrimaryFireAnim(CWeaponInfo* weapon) {
 		if (weapon->IsFlagSet(WEAPONFLAG_ANIMDETONATE))
-			return ANIM_BOMBER;
+			return ANIM_STD_DETONATE;
 		else
 			return ANIM_WEAPON_FIRE;
 	}
@@ -1070,7 +1075,7 @@ public:
 
 	static AnimationId GetSecondFireAnim(CWeaponInfo* weapon) {
 		if (weapon->IsFlagSet(WEAPONFLAG_USE_2ND))
-			return ANIM_WEAPON_FIRE_2ND; // or ANIM_MELEE_ATTACK_2ND
+			return ANIM_WEAPON_FIRE_2ND;
 		else
 			return (AnimationId)0;
 	}

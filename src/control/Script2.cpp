@@ -431,8 +431,8 @@ int8 CRunningScript::ProcessCommands300To399(int32 command)
 		float length = *(float*)&ScriptParams[5];
 		float x, y;
 		if (angle != 0.0f){
-			y = cos(angle) * length;
-			x = sin(angle) * length;
+			y = Cos(angle) * length;
+			x = Sin(angle) * length;
 		}else{
 			y = length;
 			x = 0.0f;
@@ -1030,7 +1030,7 @@ int8 CRunningScript::ProcessCommands400To499(int32 command)
 		CollectParameters(&m_nIp, 1);
 		CPlayerPed* pPed = CWorld::Players[ScriptParams[0]].m_pPed;
 		script_assert(pPed);
-		ScriptParams[0] = pPed->m_pWanted->m_nWantedLevel;
+		ScriptParams[0] = pPed->m_pWanted->GetWantedLevel();
 		StoreParameters(&m_nIp, 1);
 		return 0;
 	}
@@ -1299,9 +1299,9 @@ int8 CRunningScript::ProcessCommands400To499(int32 command)
 		CollectParameters(&m_nIp, 2);
 		CPed* pPed = CPools::GetPedPool()->GetAt(ScriptParams[0]);
 		script_assert(pPed);
-		CVehicle* pVehicle = CPools::GetVehiclePool()->GetAt(ScriptParams[1]);
+		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[1]);
 		pPed->bScriptObjectiveCompleted = false;
-		pPed->SetObjective(OBJECTIVE_DESTROY_OBJECT, pVehicle);
+		pPed->SetObjective(OBJECTIVE_DESTROY_OBJECT, pObject);
 		return 0;
 	}
 	case COMMAND_SET_CHAR_OBJ_DESTROY_CAR:

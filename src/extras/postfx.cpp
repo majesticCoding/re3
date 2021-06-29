@@ -1,5 +1,4 @@
-#define WITHWINDOWS
-#define WITH_D3D
+#define WITHD3D
 #include "common.h"
 
 #ifdef EXTENDED_COLOURFILTER
@@ -8,6 +7,7 @@
 #error "Need librw for EXTENDED_COLOURFILTER"
 #endif
 
+#include "main.h"
 #include "RwHelper.h"
 #include "Camera.h"
 #include "MBlur.h"
@@ -49,6 +49,9 @@ CPostFX::InitOnce(void)
 void
 CPostFX::Open(RwCamera *cam)
 {
+	if(pFrontBuffer)
+		Close();
+
 	uint32 width  = Pow(2.0f, int32(log2(RwRasterGetWidth (RwCameraGetRaster(cam))))+1);
 	uint32 height = Pow(2.0f, int32(log2(RwRasterGetHeight(RwCameraGetRaster(cam))))+1);
 	uint32 depth  = RwRasterGetDepth(RwCameraGetRaster(cam));
@@ -143,17 +146,17 @@ CPostFX::Open(RwCamera *cam)
 
 
 #ifdef RW_D3D9
-#include "shaders/colourfilterVC_PS.inc"
+#include "shaders/obj/colourfilterVC_PS.inc"
 	colourfilterVC_PS = rw::d3d::createPixelShader(colourfilterVC_PS_cso);
-#include "shaders/contrastPS.inc"
+#include "shaders/obj/contrastPS.inc"
 	contrast_PS = rw::d3d::createPixelShader(contrastPS_cso);
 #endif
 #ifdef RW_OPENGL
 	using namespace rw::gl3;
 
 	{
-#include "shaders/im2d_gl.inc"
-#include "shaders/colourfilterVC_fs_gl.inc"
+#include "shaders/obj/im2d_vert.inc"
+#include "shaders/obj/colourfilterVC_frag.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, im2d_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, colourfilterVC_frag_src, nil };
 	colourFilterVC = Shader::create(vs, fs);
@@ -161,8 +164,8 @@ CPostFX::Open(RwCamera *cam)
 	}
 
 	{
-#include "shaders/im2d_gl.inc"
-#include "shaders/contrast_fs_gl.inc"
+#include "shaders/obj/im2d_vert.inc"
+#include "shaders/obj/contrast_frag.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, im2d_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, contrast_frag_src, nil };
 	contrast = Shader::create(vs, fs);
@@ -386,6 +389,8 @@ CPostFX::GetBackBuffer(RwCamera *cam)
 void
 CPostFX::Render(RwCamera *cam, uint32 red, uint32 green, uint32 blue, uint32 blur, int32 type, uint32 bluralpha)
 {
+	PUSH_RENDERGROUP("CPostFX::Render");
+
 	if(pFrontBuffer == nil)
 		Open(cam);
 	assert(pFrontBuffer);
@@ -447,6 +452,8 @@ CPostFX::Render(RwCamera *cam, uint32 red, uint32 green, uint32 blue, uint32 blu
 		bJustInitialised = false;
 	}else
 		bJustInitialised = true;
+
+	POP_RENDERGROUP();
 }
 
 int CPostFX::PrevRed[NUMAVERAGE], CPostFX::AvgRed;

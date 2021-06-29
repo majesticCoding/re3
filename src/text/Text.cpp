@@ -9,9 +9,7 @@
 #include "Text.h"
 #include "Timer.h"
 
-//--MIAMI: file done
-
-static wchar WideErrorString[25];
+wchar WideErrorString[25];
 
 CText TheText;
 
@@ -111,14 +109,14 @@ wchar*
 CText::Get(const char *key)
 {
 	uint8 result = false;
-#ifdef FIX_BUGS
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 	wchar *outstr = keyArray.Search(key, data.chars, &result);
 #else
 	wchar *outstr = keyArray.Search(key, &result);
 #endif
 
 	if (!result && bHasMissionTextOffsets && bIsMissionTextLoaded)
-#ifdef FIX_BUGS
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 		outstr = mission_keyArray.Search(key, mission_data.chars, &result);
 #else
 		outstr = mission_keyArray.Search(key, &result);
@@ -205,7 +203,7 @@ CText::GetNameOfLoadedMissionText(char *outName)
 void
 CText::ReadChunkHeader(ChunkHeader *buf, int32 file, size_t *offset)
 {
-#if THIS_IS_STUPID
+#ifdef THIS_IS_STUPID
 	char *_buf = (char*)buf;
 	for (int i = 0; i < sizeof(ChunkHeader); i++) {
 		CFileMgr::Read(file, &_buf[i], 1);
@@ -260,13 +258,13 @@ CText::LoadMissionText(char *MissionTableName)
 		sprintf(filename, "SPANISH.GXT");
 		break;
 #ifdef MORE_LANGUAGES
-	case LANGUAGE_POLISH:
+	case CMenuManager::LANGUAGE_POLISH:
 		sprintf(filename, "POLISH.GXT");
 		break;
-	case LANGUAGE_RUSSIAN:
+	case CMenuManager::LANGUAGE_RUSSIAN:
 		sprintf(filename, "RUSSIAN.GXT");
 		break;
-	case LANGUAGE_JAPANESE:
+	case CMenuManager::LANGUAGE_JAPANESE:
 		sprintf(filename, "JAPANESE.GXT");
 		break;
 #endif
@@ -318,7 +316,7 @@ CKeyArray::Load(size_t length, int file, size_t* offset)
 	entries = new CKeyEntry[numEntries];
 	rawbytes = (char*)entries;
 
-#if THIS_IS_STUPID
+#ifdef THIS_IS_STUPID
 	for (uint32 i = 0; i < length; i++) {
 		CFileMgr::Read(file, &rawbytes[i], 1);
 		(*offset)++;
@@ -340,7 +338,7 @@ CKeyArray::Unload(void)
 void
 CKeyArray::Update(wchar *chars)
 {
-#ifndef FIX_BUGS
+#if !defined(FIX_BUGS) && !defined(FIX_BUGS_64)
 	int i;
 	for(i = 0; i < numEntries; i++)
 		entries[i].value = (wchar*)((uint8*)chars + (uintptr)entries[i].value);
@@ -368,7 +366,7 @@ CKeyArray::BinarySearch(const char *key, CKeyEntry *entries, int16 low, int16 hi
 }
 
 wchar*
-#ifdef FIX_BUGS
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 CKeyArray::Search(const char *key, wchar *data, uint8 *result)
 #else
 CKeyArray::Search(const char *key, uint8 *result)
@@ -378,7 +376,7 @@ CKeyArray::Search(const char *key, uint8 *result)
 	char errstr[25];
 	int i;
 
-#ifdef FIX_BUGS
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 	found = BinarySearch(key, entries, 0, numEntries-1);
 	if (found) {
 		*result = true;
@@ -393,7 +391,7 @@ CKeyArray::Search(const char *key, uint8 *result)
 #endif
 	*result = false;
 #ifdef MASTER
-	sprintf(errstr, "%");
+	sprintf(errstr, "");
 #else
 	sprintf(errstr, "%s missing", key);
 #endif // MASTER
@@ -412,7 +410,7 @@ CData::Load(size_t length, int file, size_t * offset)
 	chars = new wchar[numChars];
 	rawbytes = (char*)chars;
 
-#if THIS_IS_STUPID
+#ifdef THIS_IS_STUPID
 	for(uint32 i = 0; i < length; i++){
 		CFileMgr::Read(file, &rawbytes[i], 1);
 		(*offset)++;
@@ -434,7 +432,7 @@ CData::Unload(void)
 void
 CMissionTextOffsets::Load(size_t table_size, int file, size_t *offset, int)
 {
-#if THIS_IS_STUPID
+#ifdef THIS_IS_STUPID
 	size_t num_of_entries = table_size / sizeof(CMissionTextOffsets::Entry);
 	for (size_t mi = 0; mi < num_of_entries; mi++) {
 		for (uint32 i = 0; i < sizeof(data[mi].szMissionName); i++) {

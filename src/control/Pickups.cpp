@@ -33,8 +33,7 @@
 #include "Hud.h"
 #include "Messages.h"
 #include "Streaming.h"
-
-// --MIAMI: file done
+#include "SaveBuf.h"
 
 CPickup CPickups::aPickUps[NUMPICKUPS];
 int16 CPickups::NumMessages;
@@ -276,10 +275,11 @@ CPickup::CanBePickedUp(CPlayerPed *player, int playerId)
 {
 	assert(m_pObject != nil);
 	bool cannotBePickedUp =
-		(m_pObject->GetModelIndex() == MI_PICKUP_BODYARMOUR && player->m_fArmour > CWorld::Players[playerId].m_nMaxArmour - 0.5f)
-		|| (m_pObject->GetModelIndex() == MI_PICKUP_HEALTH && player->m_fHealth > CWorld::Players[playerId].m_nMaxHealth - 0.5f)
-		|| (m_pObject->GetModelIndex() == MI_PICKUP_BRIBE && player->m_pWanted->m_nWantedLevel == 0)
-		|| (m_pObject->GetModelIndex() == MI_PICKUP_KILLFRENZY && (CTheScripts::IsPlayerOnAMission() || CDarkel::FrenzyOnGoing() || !CGame::nastyGame));
+		(m_pObject->GetModelIndex() == MI_PICKUP_BODYARMOUR && player->m_fArmour > CWorld::Players[playerId].m_nMaxArmour - 0.2f)
+		|| (m_pObject->GetModelIndex() == MI_PICKUP_HEALTH && player->m_fHealth > CWorld::Players[playerId].m_nMaxHealth - 0.2f)
+		|| (m_pObject->GetModelIndex() == MI_PICKUP_BRIBE && player->m_pWanted->GetWantedLevel() == 0)
+		|| (m_pObject->GetModelIndex() == MI_PICKUP_KILLFRENZY && (CTheScripts::IsPlayerOnAMission() || CDarkel::FrenzyOnGoing() || !CGame::nastyGame))
+		|| (m_eType == PICKUP_ASSET_REVENUE && m_fRevenue < 10.0f);
 	return !cannotBePickedUp;
 }
 
@@ -784,7 +784,7 @@ CPickups::GivePlayerGoodiesWithPickUpMI(int16 modelIndex, int playerIndex)
 		DMAudio.PlayFrontEndSound(SOUND_PICKUP_BONUS, 0);
 		return true;
 	} else if (modelIndex == MI_PICKUP_BRIBE) {
-		int32 level = Max(FindPlayerPed()->m_pWanted->m_nWantedLevel - 1, 0);
+		int32 level = Max(FindPlayerPed()->m_pWanted->GetWantedLevel() - 1, 0);
 		player->SetWantedLevel(level);
 		DMAudio.PlayFrontEndSound(SOUND_PICKUP_BONUS, 0);
 		return true;
@@ -1009,8 +1009,7 @@ CPickups::DoPickUpEffects(CEntity *entity)
 		entity->bDoNotRender = CTheScripts::IsPlayerOnAMission() || CDarkel::FrenzyOnGoing() || !CGame::nastyGame;
 
 	if (!entity->bDoNotRender) {
-		float s = Sin((float)((CTimer::GetTimeInMilliseconds() + (uintptr)entity) & 0x7FF) * DEGTORAD(360.0f / 0x800));
-		float modifiedSin = 0.3f * (s + 1.0f);
+		float modifiedSin = 0.3f * (Sin((float)((CTimer::GetTimeInMilliseconds() + (uintptr)entity) & 0x7FF) * DEGTORAD(360.0f / 0x800)) + 1.0f);
 
 #ifdef FIX_BUGS
 		int16 colorId = 0;
@@ -1150,7 +1149,20 @@ CPickups::DoPickUpEffects(CEntity *entity)
 		if (model == MI_MINIGUN || model == MI_MINIGUN2)
 			scale = 1.2f;
 
-		entity->GetMatrix().SetRotateZOnlyScaled((float)(CTimer::GetTimeInMilliseconds() & 0x7FF) * DEGTORAD(360.0f / 0x800), scale);
+		float angle = (float)(CTimer::GetTimeInMilliseconds() & 0x7FF) * DEGTORAD(360.0f / 0x800);
+		float c = Cos(angle) * scale;
+		float s = Sin(angle) * scale;
+
+		// we know from SA they were setting each field manually like this
+		entity->GetMatrix().rx = c;
+		entity->GetMatrix().ry = s;
+		entity->GetMatrix().rz = 0.0f;
+		entity->GetMatrix().fx = -s;
+		entity->GetMatrix().fy = c;
+		entity->GetMatrix().fz = 0.0f;
+		entity->GetMatrix().ux = 0.0f;
+		entity->GetMatrix().uy = 0.0f;
+		entity->GetMatrix().uz = scale;
 
 		if (entity->GetModelIndex() == MI_MINIGUN2) {
 			CMatrix matrix1;
@@ -1186,7 +1198,9 @@ CPickups::DoPickUpEffects(CEntity *entity)
 					CCoronas::REFLECTION_OFF,
 					CCoronas::LOSCHECK_OFF,
 					CCoronas::STREAK_OFF,
-					0.0f);
+					0.0f,
+					false,
+					-0.5f);
 			}
 		}
 
@@ -1253,7 +1267,7 @@ CPickups::DoCollectableEffects(CEntity *entity)
 		int32 color = (MAXDIST - dist) * (0.5f * s + 0.5f) / MAXDIST * 255.0f;
 		CShadows::StoreStaticShadow((uintptr)entity, SHADOWTYPE_ADDITIVE, gpShadowExplosionTex, &pos, 2.0f, 0.0f, 0.0f, -2.0f, 0, color, color, color, 4.0f,
 		                            1.0f, 40.0f, false, 0.0f);
-		CCoronas::RegisterCorona((uintptr)entity, color, color, color, 255, pos, 0.6f, 40.0f, CCoronas::TYPE_RING, CCoronas::FLARE_NONE, CCoronas::REFLECTION_OFF, CCoronas::LOSCHECK_OFF, CCoronas::STREAK_OFF, 0.0f);
+		CCoronas::RegisterCorona((uintptr)entity, color, color, color, 255, pos, 0.6f, 40.0f, CCoronas::TYPE_HEX, CCoronas::FLARE_NONE, CCoronas::REFLECTION_OFF, CCoronas::LOSCHECK_OFF, CCoronas::STREAK_OFF, 0.0f);
 	}
 
 	entity->GetMatrix().SetRotateZOnly((float)(CTimer::GetTimeInMilliseconds() & 0xFFF) * DEGTORAD(360.0f / 0x1000));
@@ -1428,7 +1442,7 @@ CPickups::Load(uint8 *buf, uint32 size)
 INITSAVEBUF
 
 	for (int32 i = 0; i < NUMPICKUPS; i++) {
-		aPickUps[i] = ReadSaveBuf<CPickup>(buf);
+		ReadSaveBuf(&aPickUps[i], buf);
 
 		if (aPickUps[i].m_eType != PICKUP_NONE) {
 			if (aPickUps[i].m_pObject != nil)
@@ -1439,12 +1453,12 @@ INITSAVEBUF
 			
 	}
 
-	CollectedPickUpIndex = ReadSaveBuf<uint16>(buf);
-	ReadSaveBuf<uint16>(buf);
+	ReadSaveBuf(&CollectedPickUpIndex, buf);
+	SkipSaveBuf(buf, 2);
 	NumMessages = 0;
 
 	for (uint16 i = 0; i < NUMCOLLECTEDPICKUPS; i++)
-		aPickUpsCollected[i] = ReadSaveBuf<int32>(buf);
+		ReadSaveBuf(&aPickUpsCollected[i], buf);
 
 VALIDATESAVEBUF(size)
 }
@@ -1576,7 +1590,6 @@ CPacManPickups::ResetPowerPillsCarriedByPlayer()
 {
 }
 
-// --MIAMI: Done
 void
 CPed::CreateDeadPedMoney(void)
 {
@@ -1597,7 +1610,6 @@ CPed::CreateDeadPedMoney(void)
 	m_nPedMoney = 0;
 }
 
-// --MIAMI: Done
 void
 CPed::CreateDeadPedWeaponPickups(void)
 {
@@ -1623,7 +1635,6 @@ CPed::CreateDeadPedWeaponPickups(void)
 	ClearWeapons();
 }
 
-// --MIAMI: Done
 void
 CPed::CreateDeadPedPickupCoors(float *x, float *y, float *z)
 {

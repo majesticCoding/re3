@@ -1,4 +1,4 @@
-#define WITH_D3D
+#define WITHD3D
 #include "common.h"
 
 #ifdef SCREEN_DROPLETS
@@ -112,14 +112,14 @@ ScreenDroplets::InitDraw(void)
 
 	openim2d_uv2();
 #ifdef RW_D3D9
-#include "shaders/screenDroplet_PS.inc"
+#include "shaders/obj/screenDroplet_PS.inc"
 	screenDroplet_PS = rw::d3d::createPixelShader(screenDroplet_PS_cso);
 #endif
 #ifdef RW_GL3
 	using namespace rw::gl3;
 	{
-#include "shaders/im2d_UV2_gl.inc"
-#include "shaders/screenDroplet_fs_gl.inc"
+#include "shaders/obj/im2d_UV2_vert.inc"
+#include "shaders/obj/screenDroplet_frag.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, im2d_UV2_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, screenDroplet_frag_src, nil };
 	screenDroplet = Shader::create(vs, fs);
@@ -423,7 +423,7 @@ ScreenDroplets::ProcessCameraMovement(void)
 	ms_movingEnabled = !isTopDown && !isLookingInDirection;
 
 	// 0 when looking stright up, 180 when looking up or down
-	ms_camUpAngle = RADTODEG(Acos(clamp(camUp.z, -1.0f, 1.0f)));
+	ms_camUpAngle = RADTODEG(Acos(Clamp(camUp.z, -1.0f, 1.0f)));
 }
 
 void

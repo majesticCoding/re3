@@ -8,8 +8,6 @@
 #include "Lines.h"	// for debug
 #include "PathFind.h"
 
-//--MIAMI: file done except mobile unused function
-
 bool gbShowPedPaths;
 bool gbShowCarPaths;
 bool gbShowCarPathsLinks;
@@ -202,8 +200,8 @@ CPedPath::AddBlockade(CEntity *pEntity, CPedPathNode(*pathNodes)[40], CVector *p
 	const float fBoundMaxY = boundingBox.max.y + 0.3f;
 	const float fBoundMinY = boundingBox.min.y - 0.3f;
 	const float fBoundMaxX = boundingBox.max.x + 0.3f;
-	const float fDistanceX = pPosition->x - pEntity->m_matrix.GetPosition().x;
-	const float fDistanceY = pPosition->y - pEntity->m_matrix.GetPosition().y;
+	const float fDistanceX = pPosition->x - pEntity->GetMatrix().GetPosition().x;
+	const float fDistanceY = pPosition->y - pEntity->GetMatrix().GetPosition().y;
 	const float fBoundRadius = pEntity->GetBoundRadius();
 	CVector vecBoundCentre;
 	pEntity->GetBoundCentre(vecBoundCentre);
@@ -217,8 +215,8 @@ CPedPath::AddBlockade(CEntity *pEntity, CPedPathNode(*pathNodes)[40], CVector *p
 				if (!pathNodes[x][y].bBlockade) {
 					const float pointY = y * 0.7f + fDistanceY;
 					CVector2D point(pointX, pointY);
-					if (fBoundMaxX > Abs(DotProduct2D(point, pEntity->m_matrix.GetRight()))) {
-						float fDotProduct = DotProduct2D(point, pEntity->m_matrix.GetForward());
+					if (fBoundMaxX > Abs(DotProduct2D(point, pEntity->GetMatrix().GetRight()))) {
+						float fDotProduct = DotProduct2D(point, pEntity->GetMatrix().GetForward());
 						if (fBoundMaxY > fDotProduct && fBoundMinY < fDotProduct)
 							pathNodes[x][y].bBlockade = true;
 					}
@@ -340,17 +338,17 @@ CPathFind::StoreNodeInfoCar(int16 id, int16 node, int8 type, int8 next, int16 x,
 	InfoForTileCars[i].x = x/16.0f;
 	InfoForTileCars[i].y = y/16.0f;
 	InfoForTileCars[i].z = z/16.0f;
-	InfoForTilePeds[i].width = 8.0f*Min(width, 15.0f);
+	InfoForTileCars[i].width = 8.0f*Min(width, 15.0f);
 	InfoForTileCars[i].numLeftLanes = numLeft;
 	InfoForTileCars[i].numRightLanes = numRight;
-	InfoForTilePeds[i].crossing = false;
-	InfoForTilePeds[i].speedLimit = 0;
-	InfoForTilePeds[i].roadBlock = false;
-	InfoForTilePeds[i].disabled = false;
-	InfoForTilePeds[i].waterPath = false;
-	InfoForTilePeds[i].onlySmallBoats = false;
-	InfoForTilePeds[i].betweenLevels = false;
-	InfoForTilePeds[i].spawnRate = Min(spawnRate, 15);
+	InfoForTileCars[i].crossing = false;
+	InfoForTileCars[i].speedLimit = 0;
+	InfoForTileCars[i].roadBlock = false;
+	InfoForTileCars[i].disabled = false;
+	InfoForTileCars[i].waterPath = false;
+	InfoForTileCars[i].onlySmallBoats = false;
+	InfoForTileCars[i].betweenLevels = false;
+	InfoForTileCars[i].spawnRate = Min(spawnRate, 15);
 
 	if(node == 11)
 		InfoForTileCars[id*12].SwapConnectionsToBeRightWayRound();
@@ -861,7 +859,7 @@ CPathFind::PreparePathDataForType(uint8 type, CTempNode *tempnodes, CPathInfoFor
 					mag = Sqrt(dx*dx + dy*dy);
 					dx /= mag;
 					dy /= mag;
-					int width = Max(m_pathNodes[i].width, m_pathNodes[j].width);
+					uint8 width = Max(m_pathNodes[i].width, m_pathNodes[j].width);
 					if(i < j){
 						dx = -dx;
 						dy = -dy;
@@ -1820,6 +1818,12 @@ CPathFind::Load(uint8 *buf, uint32 size)
 			m_pathNodes[i].bBetweenLevels = true;
 		else
 			m_pathNodes[i].bBetweenLevels = false;
+
+#ifdef SECUROM
+	// if pirated game
+	for(i = 0; i < m_numPathNodes; i++)
+		m_pathNodes[i].bDisabled = true;
+#endif
 }
 
 void

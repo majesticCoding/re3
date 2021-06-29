@@ -1,11 +1,4 @@
-#pragma warning( push )
-#pragma warning( disable : 4005)
-#if defined RW_D3D9 || defined RWLIBS
-#define DIRECTINPUT_VERSION 0x0800
-#include <dinput.h>
-#endif
-#pragma warning( pop )
-
+#define WITHDINPUT
 #include "common.h"
 #include "crossplatform.h"
 #include "platform.h"
@@ -53,8 +46,6 @@
 #include "eetypes.h"
 #include "libpad.h"
 #endif
-
-// --MIAMI: file done except Mobile(see TODOs) and PS2 stuff
 
 CPad Pads[MAX_PADS];
 #ifdef GTA_PS2
@@ -151,7 +142,7 @@ void PickUpChicksCheat()
 	if ( FindPlayerVehicle() && (FindPlayerVehicle()->IsCar() || FindPlayerVehicle()->IsBike()) )
 	{
 		CVehicle *vehicle = FindPlayerVehicle();
-		if ( FindPlayerVehicle()->m_vehType == 5 )
+		if ( FindPlayerVehicle()->IsBike() )
 		{
 			if ( vehicle->pPassengers[0] )
 				vehicle->pPassengers[0]->SetObjective(OBJECTIVE_LEAVE_CAR, vehicle);
@@ -457,7 +448,7 @@ void ArmourCheat()
 void WantedLevelUpCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT5"), true);
-	FindPlayerPed()->m_pWanted->CheatWantedLevel(Min(FindPlayerPed()->m_pWanted->m_nWantedLevel + 2, 6));
+	FindPlayerPed()->m_pWanted->CheatWantedLevel(Min(FindPlayerPed()->m_pWanted->GetWantedLevel() + 2, 6));
 }
 
 void WantedLevelDownCheat()
@@ -1594,8 +1585,14 @@ void CPad::AddToPCCheatString(char c)
 }
 
 #ifdef XINPUT
+int CPad::XInputJoy1 = 0;
+int CPad::XInputJoy2 = 1;
 void CPad::AffectFromXinput(uint32 pad)
 {
+	pad = pad == 0 ? XInputJoy1 : XInputJoy2;
+	if (pad == -1) // LoadINIControllerSettings can set it to -1
+		return;
+
 	XINPUT_STATE xstate;
 	memset(&xstate, 0, sizeof(XINPUT_STATE));
 	if (XInputGetState(pad, &xstate) == ERROR_SUCCESS)

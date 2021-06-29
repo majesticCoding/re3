@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include "main.h"
 #include "General.h"
 #include "Timer.h"
 #include "TxdStore.h"
@@ -18,7 +19,8 @@
 #include "ParticleObject.h"
 #include "Particle.h"
 #include "soundlist.h"
-
+#include "SaveBuf.h"
+#include "debugmenu.h"
 
 #define MAX_PARTICLES_ON_SCREEN   (750)
 
@@ -48,6 +50,8 @@
 #define MAX_CARSPLASH_FILES       ARRAY_SIZE(CarsplashFiles)
 
 #define MAX_RAINDRIP_FILES       (2)
+
+#define MAX_LEAF_FILES           (2)
 
 	
 const char SmokeFiles[][6+1] =
@@ -165,7 +169,7 @@ RwTexture *gpFlame1Tex;
 RwTexture *gpFlame5Tex;
 RwTexture *gpRainDropSmallTex;
 RwTexture *gpBloodTex;
-RwTexture *gpLeafTex;
+RwTexture *gpLeafTex[MAX_LEAF_FILES];
 RwTexture *gpCloudTex1;
 RwTexture *gpCloudTex4;
 RwTexture *gpBloodSmallTex;
@@ -193,7 +197,7 @@ RwRaster  *gpFlame1Raster;
 RwRaster  *gpFlame5Raster;
 RwRaster  *gpRainDropSmallRaster;
 RwRaster  *gpBloodRaster;
-RwRaster  *gpLeafRaster;
+RwRaster  *gpLeafRaster[MAX_LEAF_FILES];
 RwRaster  *gpCloudRaster1;
 RwRaster  *gpCloudRaster4;
 RwRaster  *gpBloodSmallRaster;
@@ -205,9 +209,6 @@ RwRaster  *gpPointlightRaster;
 
 RwTexture *gpRainDropTex;
 RwRaster  *gpRainDropRaster;
-
-RwTexture *gpLetterTex;
-RwRaster *gpLetterRaster;
 
 RwTexture *gpSparkTex;
 RwTexture *gpNewspaperTex;
@@ -425,11 +426,11 @@ void CParticle::Initialise()
 	gpBloodTex = RwTextureRead("blood", nil);
 	gpBloodRaster = RwTextureGetRaster(gpBloodTex);
 
-	gpLeafTex = RwTextureRead("gameleaf01_64", nil);
-	gpLeafRaster = RwTextureGetRaster(gpLeafTex);
+	gpLeafTex[0] = RwTextureRead("gameleaf01_64", nil);
+	gpLeafRaster[0] = RwTextureGetRaster(gpLeafTex[0]);
 	
-	gpLetterTex = RwTextureRead("letter", nil);
-	gpLetterRaster = RwTextureGetRaster(gpLetterTex);
+	gpLeafTex[1] = RwTextureRead("letter", nil);
+	gpLeafRaster[1] = RwTextureGetRaster(gpLeafTex[1]);
 
 	gpCloudTex1 = RwTextureRead("cloud3", nil);
 	gpCloudRaster1 = RwTextureGetRaster(gpCloudTex1);
@@ -543,7 +544,7 @@ void CParticle::Initialise()
 			
 			case PARTICLE_DEBRIS:
 			case PARTICLE_TREE_LEAVES:
-				entry->m_ppRaster = &gpLeafRaster;
+				entry->m_ppRaster = gpLeafRaster;
 				break;
 			
 			case PARTICLE_DEBRIS2:
@@ -773,11 +774,11 @@ void CParticle::Shutdown()
 	RwTextureDestroy(gpBloodTex);
 	gpBloodTex = nil;
 	
-	RwTextureDestroy(gpLeafTex);
-	gpLeafTex = nil;
+	RwTextureDestroy(gpLeafTex[0]);
+	gpLeafTex[0] = nil;
 
-	RwTextureDestroy(gpLetterTex);
-	gpLetterTex = nil;
+	RwTextureDestroy(gpLeafTex[1]);
+	gpLeafTex[1] = nil;
 	
 	RwTextureDestroy(gpCloudTex1);
 	gpCloudTex1 = nil;
@@ -970,15 +971,15 @@ CParticle *CParticle::AddParticle(tParticleType type, CVector const &vecPos, CVe
 			int32 ColorVariation = CGeneral::GetRandomNumberInRange(-psystem->m_InitialColorVariation, psystem->m_InitialColorVariation);
 			//float ColorVariation = CGeneral::GetRandomNumberInRange((float)-psystem->m_InitialColorVariation, (float)psystem->m_InitialColorVariation);
   
-			pParticle->m_Color.red   = clamp(pParticle->m_Color.red +
+			pParticle->m_Color.red   = Clamp(pParticle->m_Color.red +
 				PERCENT(pParticle->m_Color.red, ColorVariation),
 				0, 255);
 			
-			pParticle->m_Color.green = clamp(pParticle->m_Color.green +
+			pParticle->m_Color.green = Clamp(pParticle->m_Color.green +
 				PERCENT(pParticle->m_Color.green, ColorVariation),
 				0, 255);
 			
-			pParticle->m_Color.blue  = clamp(pParticle->m_Color.blue +
+			pParticle->m_Color.blue  = Clamp(pParticle->m_Color.blue +
 				PERCENT(pParticle->m_Color.blue, ColorVariation),
 				0, 255);
 		}
@@ -1384,15 +1385,15 @@ void CParticle::Update()
 				{
 					float colorMul = 1.0f - float(particle->m_nTimeWhenColorWillBeChanged - CTimer::GetTimeInMilliseconds()) / float(psystem->m_ColorFadeTime);
 				
-					particle->m_Color.red = clamp(
+					particle->m_Color.red = Clamp(
 						psystem->m_RenderColouring.red + int32(float(psystem->m_FadeDestinationColor.red - psystem->m_RenderColouring.red) * colorMul),
 						0, 255);
 					
-					particle->m_Color.green = clamp(
+					particle->m_Color.green = Clamp(
 						psystem->m_RenderColouring.green + int32(float(psystem->m_FadeDestinationColor.green - psystem->m_RenderColouring.green) * colorMul),
 						0, 255);
 						
-					particle->m_Color.blue = clamp(
+					particle->m_Color.blue = Clamp(
 						psystem->m_RenderColouring.blue + int32(float(psystem->m_FadeDestinationColor.blue - psystem->m_RenderColouring.blue) * colorMul),
 						0, 255);
 				}
@@ -1702,13 +1703,13 @@ void CParticle::Update()
 
 			if ( particle->m_nFadeToBlackTimer != 0 )
 			{
-				particle->m_nColorIntensity = clamp(particle->m_nColorIntensity - particle->m_nFadeToBlackTimer,
+				particle->m_nColorIntensity = Clamp(particle->m_nColorIntensity - particle->m_nFadeToBlackTimer,
 														0, 255);
 			}
 
 			if ( particle->m_nFadeAlphaTimer != 0 )
 			{
-				particle->m_nAlpha = clamp(particle->m_nAlpha - particle->m_nFadeAlphaTimer,
+				particle->m_nAlpha = Clamp(particle->m_nAlpha - particle->m_nFadeAlphaTimer,
 														0, 255);
 				if ( particle->m_nAlpha == 0 )
 				{
@@ -1786,6 +1787,8 @@ void CParticle::Update()
 
 void CParticle::Render()
 {
+	PUSH_RENDERGROUP("CParticle::Render");
+
 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void *)rwTEXTUREADDRESSWRAP);
 	RwRenderStateSet(rwRENDERSTATETEXTUREPERSPECTIVE, (void *)TRUE);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void *)FALSE);
@@ -1878,11 +1881,20 @@ void CParticle::Render()
 			
 			if ( canDraw && psystem->Flags & DRAWTOP2D )
 			{
-				float screenZ = (particle->m_vecPosition.z - CDraw::GetNearClipZ())
+				float screenZ;
+#ifdef FIX_BUGS
+				bool zIsZero = true;
+				if ( particle->m_vecPosition.z != 0.0f ) {
+#endif
+				screenZ = (particle->m_vecPosition.z - CDraw::GetNearClipZ())
 					* (CSprite::GetFarScreenZ() - CSprite::GetNearScreenZ())
 					* CDraw::GetFarClipZ()
 					/ ( (CDraw::GetFarClipZ() - CDraw::GetNearClipZ()) * particle->m_vecPosition.z )
 					+ CSprite::GetNearScreenZ();
+#ifdef FIX_BUGS
+				zIsZero = false;
+				}
+#endif
 				
 				float stretchTexW;
 				float stretchTexH;
@@ -1898,6 +1910,9 @@ void CParticle::Render()
 					stretchTexH = CGeneral::GetRandomNumberInRange(0.1f, 1.0f) * psystem->m_vecTextureStretch.y + 63.0f;
 				}
 
+#ifdef FIX_BUGS
+				if (!zIsZero) {
+#endif
 				
 				if ( i == PARTICLE_WATERDROP )
 				{
@@ -1999,7 +2014,10 @@ void CParticle::Render()
 					
 					canDraw = false;
 				}
-				
+#ifdef FIX_BUGS
+				}
+				if ( !(zIsZero && (i == PARTICLE_WATERDROP || i == PARTICLE_BLOODDROP || i == PARTICLE_HEATHAZE_IN_DIST || i == PARTICLE_HEATHAZE) ) )
+#endif				
 				if ( canDraw )
 				{
 					if ( particle->m_nRotation != 0 )
@@ -2283,6 +2301,8 @@ void CParticle::Render()
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void *)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void *)rwBLENDINVSRCALPHA);
+
+	POP_RENDERGROUP();
 }
 
 void CParticle::RemovePSystem(tParticleType type)
@@ -2331,9 +2351,9 @@ void CParticle::AddJetExplosion(CVector const &vecPos, float fPower, float fSize
 					vecStepPos,
 					CVector
 					(
-						CGeneral::GetRandomNumberInRange(-0.2f, 0.2f),
-						CGeneral::GetRandomNumberInRange(-0.2f, 0.2f),
-						CGeneral::GetRandomNumberInRange(-0.2f, 0.0f)
+						CGeneral::GetRandomNumberInRange(-0.02f, 0.02f),
+						CGeneral::GetRandomNumberInRange(-0.02f, 0.02f),
+						CGeneral::GetRandomNumberInRange(-0.02f, 0.0f)
 					),
 					nil,
 					fSize, color, 0, 0, 0, 0);

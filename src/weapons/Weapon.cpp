@@ -35,6 +35,7 @@
 #include "Glass.h"
 #include "Sprite.h"
 #include "Pickups.h"
+#include "SaveBuf.h"
 
 float fReloadAnimSampleFraction[5] = {  0.5f,  0.7f,  0.75f,  0.75f,  0.7f };
 float fSeaSparrowAimingAngle = 10.0f;
@@ -43,6 +44,10 @@ float fPlayerAimScaleDist = 5.0f;
 float fPlayerAimScale = 2.5f;
 
 bool CWeapon::bPhotographHasBeenTaken;
+
+#ifdef SECUROM
+int32 sniperPirateCheck = 0x00797743; // 'Cwy\0' ???
+#endif
 
 CWeaponInfo *
 CWeapon::GetInfo()
@@ -247,7 +252,7 @@ CWeapon::Fire(CEntity *shooter, CVector *fireSource)
 				else if ( shooter->IsPed() && ((CPed*)shooter)->m_pSeekTarget != nil )
 				{
 					float distToTarget = (shooter->GetPosition() - ((CPed*)shooter)->m_pSeekTarget->GetPosition()).Magnitude();
-					float power = clamp((distToTarget-10.0f)*0.02f, 0.2f, 1.0f);
+					float power = Clamp((distToTarget-10.0f)*0.02f, 0.2f, 1.0f);
 
 					fired = FireProjectile(shooter, source, power);
 				}
@@ -672,9 +677,9 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
 										victimPed->ApplyMoveForce(posOffset.x*-5.0f, posOffset.y*-5.0f, 3.0f);
 
 									if ( isHeavy && victimPed->IsPlayer() )
-										victimPed->SetFall(3000, AnimationId(ANIM_KO_SKID_FRONT + localDir), false);
+										victimPed->SetFall(3000, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), false);
 									else
-										victimPed->SetFall(1500, AnimationId(ANIM_KO_SKID_FRONT + localDir), false);
+										victimPed->SetFall(1500, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), false);
 
 									shooterPed->m_pSeekTarget = victimPed;
 									shooterPed->m_pSeekTarget->RegisterReference(&shooterPed->m_pSeekTarget);
@@ -911,7 +916,7 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 				CWorld::bIncludeDeadPeds = true;
 
 			CWorld::bIncludeBikers = true;
-			CWorld::ProcessLineOfSight(*fireSource, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(*fireSource, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 			CWorld::bIncludeDeadPeds = false;
 			CWorld::bIncludeBikers = false;
 		}
@@ -924,7 +929,7 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 			shooterPed->TransformToNode(target, PED_HANDR);
 
 			CWorld::bIncludeBikers = true;
-			CWorld::ProcessLineOfSight(*fireSource, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(*fireSource, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 			CWorld::bIncludeBikers = false;
 		}
 	}
@@ -935,7 +940,7 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 		CWorld::bIncludeBikers = true;
 		CWorld::bIncludeDeadPeds = true;
 		CWorld::bIncludeCarTyres = true;
-		CWorld::ProcessLineOfSight(source, target, point, victim, true, true, true, true, true, false, false, true);
+		ProcessLineOfSight(source, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 		CWorld::bIncludeBikers = false;
 		CWorld::bIncludeDeadPeds = false;
 		CWorld::bIncludeCarTyres = false;
@@ -981,7 +986,7 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 			target *= info->m_fRange;
 			target += *fireSource;
 			CWorld::pIgnoreEntity = shooter;
-			CWorld::ProcessLineOfSight(*fireSource, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(*fireSource, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, true, false);
 			CWorld::pIgnoreEntity = nil;
 
 			int32 rotSpeed = 1;
@@ -1014,7 +1019,7 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 			}
 
 			CWorld::bIncludeBikers = true;
-			CWorld::ProcessLineOfSight(*fireSource, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(*fireSource, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 			CWorld::bIncludeBikers = false;
 
 			int32 rotSpeed = 1;
@@ -1062,7 +1067,11 @@ CWeapon::FireInstantHit(CEntity *shooter, CVector *fireSource)
 
 			if ( info->m_nFiringRate >= 50 || !(++counter & 1) )
 			{
+#ifdef FIX_BUGS
+				AddGunFlashBigGuns(*fireSource, target);
+#else
 				AddGunFlashBigGuns(*fireSource, *fireSource + target);
+#endif
 
 				CVector gunshellPos = *fireSource;
 				gunshellPos -= CVector(0.65f*ahead.x, 0.65f*ahead.y, 0.0f);
@@ -1347,7 +1356,7 @@ CWeapon::DoBulletImpact(CEntity *shooter, CEntity *victim,
 						victimPed->bIsStanding = false;
 
 						victimPed->ApplyMoveForce(posOffset.x*-5.0f, posOffset.y*-5.0f, 5.0f);
-						victimPed->SetFall(1500, AnimationId(ANIM_KO_SKID_FRONT + localDir), false);
+						victimPed->SetFall(1500, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), false);
 
 						victimPed->InflictDamage(shooter, m_eWeaponType, info->m_nDamage, (ePedPieceTypes)point->pieceB, localDir);
 					}
@@ -1360,7 +1369,7 @@ CWeapon::DoBulletImpact(CEntity *shooter, CEntity *victim,
 							{
 								victimPed->ClearAttackByRemovingAnim();
 
-								CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_SHOT_FRONT_PARTIAL + localDir));
+								CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_STD_HITBYGUN_FRONT + localDir));
 								ASSERT(asoc!=nil);
 
 								asoc->blendAmount = 0.0f;
@@ -1376,7 +1385,7 @@ CWeapon::DoBulletImpact(CEntity *shooter, CEntity *victim,
 						{
 							victimPed->ClearAttackByRemovingAnim();
 
-							CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_SHOT_FRONT_PARTIAL + localDir));
+							CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_STD_HITBYGUN_FRONT + localDir));
 							ASSERT(asoc!=nil);
 
 							asoc->blendAmount = 0.0f;
@@ -1432,9 +1441,9 @@ CWeapon::DoBulletImpact(CEntity *shooter, CEntity *victim,
 					{
 						CAnimBlendAssociation *asoc;
 						if ( RpAnimBlendClumpGetFirstAssociation(victimPed->GetClump(), ASSOC_FRONTAL) )
-							asoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT_F, 8.0f);
+							asoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR_FRONT, 8.0f);
 						else
-							asoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT,   8.0f);
+							asoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR,   8.0f);
 
 						if ( asoc )
 						{
@@ -1683,7 +1692,7 @@ CWeapon::FireShotgun(CEntity *shooter, CVector *fireSource)
 			CWorld::bIncludeCarTyres = true;
 			CWorld::bIncludeBikers = true;
 			CWorld::bIncludeDeadPeds = true;
-			CWorld::ProcessLineOfSight(source, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(source, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 			CWorld::bIncludeDeadPeds = false;
 			CWorld::bIncludeCarTyres = false;
 		}
@@ -1716,7 +1725,7 @@ CWeapon::FireShotgun(CEntity *shooter, CVector *fireSource)
 				CWorld::bIncludeDeadPeds = true;
 
 			CWorld::bIncludeBikers = true;
-			CWorld::ProcessLineOfSight(*fireSource, target, point, victim, true, true, true, true, true, false, false, true);
+			ProcessLineOfSight(*fireSource, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, false, false);
 			CWorld::bIncludeDeadPeds = false;
 		}
 		CWorld::bIncludeBikers = false;
@@ -1805,7 +1814,7 @@ CWeapon::FireShotgun(CEntity *shooter, CVector *fireSource)
 						victimPed->ApplyMoveForce(posOffset.x*-2.0f, posOffset.y*-2.0f, 0.0f);
 
 					if ( cantStandup )
-						victimPed->SetFall(1500, AnimationId(ANIM_KO_SKID_FRONT + localDir), false);
+						victimPed->SetFall(1500, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), false);
 
 					victimPed->InflictDamage(shooter, m_eWeaponType, info->m_nDamage, (ePedPieceTypes)point.pieceB, localDir);
 
@@ -1845,11 +1854,11 @@ CWeapon::FireShotgun(CEntity *shooter, CVector *fireSource)
 							CAnimBlendAssociation *hitAssoc;
 							if (RpAnimBlendClumpGetFirstAssociation(victimPed->GetClump(), ASSOC_FRONTAL))
 							{
-								hitAssoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT_F, 8.0f);
+								hitAssoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR_FRONT, 8.0f);
 							}
 							else
 							{
-								hitAssoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT, 8.0f);
+								hitAssoc = CAnimManager::BlendAnimation(victimPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR, 8.0f);
 							}
 							if (hitAssoc)
 							{
@@ -2201,6 +2210,13 @@ CWeapon::FireSniper(CEntity *shooter)
 		}
 	}
 
+#ifdef SECUROM
+	if (sniperPirateCheck){
+		// if not pirated game
+		// sniperPirateCheck = 0;
+	}
+#endif
+
 #ifndef FIX_BUGS
 	CWeaponInfo *info = GetInfo(); //unused
 #endif
@@ -2216,6 +2232,10 @@ CWeapon::FireSniper(CEntity *shooter)
 
 	dir.Normalise();
 	dir *= 16.0f;
+
+#ifdef SECUROM
+	if (sniperPirateCheck) return true;
+#endif
 
 	CBulletInfo::AddBullet(shooter, m_eWeaponType, source, dir);
 
@@ -2329,7 +2349,7 @@ CWeapon::FireM16_1stPerson(CEntity *shooter)
 	CVector source = cam->Source;
 	CVector target = cam->Front*info->m_fRange + source;
 
-	if (CWorld::ProcessLineOfSight(source, target, point, victim, true, true, true, true, true, false, false, true)) {
+	if (ProcessLineOfSight(source, target, point, victim, m_eWeaponType, shooter, true, true, true, true, true, true, false)) {
 		CheckForShootingVehicleOccupant(&victim, &point, m_eWeaponType, source, target);
 	}
 	CWorld::pIgnoreEntity = nil;
@@ -2520,7 +2540,7 @@ CWeapon::FireInstantHitFromCar(CVehicle *shooter, bool left, bool right)
 				victimPed->ReactToAttack(FindPlayerPed());
 				victimPed->ClearAttackByRemovingAnim();
 
-				CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_SHOT_FRONT_PARTIAL + localDir));
+				CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_STD_HITBYGUN_FRONT + localDir));
 				ASSERT(asoc!=nil);
 				asoc->blendAmount = 0.0f;
 				asoc->blendDelta  = 8.0f;
@@ -2953,7 +2973,7 @@ FireOneInstantHitRound(CVector *source, CVector *target, int32 damage)
 
 				victimPed->ClearAttackByRemovingAnim();
 
-				CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_SHOT_FRONT_PARTIAL + localDir));
+				CAnimBlendAssociation *asoc = CAnimManager::AddAnimation(victimPed->GetClump(), ASSOCGRP_STD, AnimationId(ANIM_STD_HITBYGUN_FRONT + localDir));
 				ASSERT(asoc!=nil);
 				asoc->blendAmount = 0.0f;
 				asoc->blendDelta  = 8.0f;
@@ -3158,7 +3178,6 @@ CWeapon::HasWeaponAmmoToBeUsed(void)
 		return m_nAmmoTotal != 0;
 }
 
-// --MIAMI: Done
 bool
 CPed::IsPedDoingDriveByShooting(void)
 {
@@ -3176,7 +3195,7 @@ CPed::IsPedDoingDriveByShooting(void)
 bool
 CWeapon::ProcessLineOfSight(CVector const &point1, CVector const &point2, CColPoint &point, CEntity *&entity, eWeaponType type, CEntity *shooter, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, bool ignoreSomeObjects)
 {
-	return CWorld::ProcessLineOfSight(point1, point2, point, entity, checkBuildings, checkVehicles, checkPeds, checkObjects, checkDummies, ignoreSeeThrough, ignoreSomeObjects);
+	return CWorld::ProcessLineOfSight(point1, point2, point, entity, checkBuildings, checkVehicles, checkPeds, checkObjects, checkDummies, false, ignoreSomeObjects, true);
 }
 
 

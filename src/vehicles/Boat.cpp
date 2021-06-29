@@ -1,4 +1,4 @@
-﻿#include "common.h"
+#include "common.h"
 
 #include "main.h"
 #include "General.h"
@@ -27,19 +27,19 @@
 #include "RpAnimBlend.h"
 #include "Record.h"
 #include "Shadows.h"
-
-//--MIAMI: file done
+#include "Wanted.h"
+#include "SaveBuf.h"
 
 #define INVALID_ORIENTATION (-9999.99f)
-
-float fShapeLength = 0.4f;
-float fShapeTime = 0.05f;
-float fRangeMult = 0.6f;
-float fTimeMult;
 
 float CBoat::MAX_WAKE_LENGTH = 50.0f;
 float CBoat::MIN_WAKE_INTERVAL = 2.0f;
 float CBoat::WAKE_LIFETIME = 150.0f;
+
+float fShapeLength = 0.4f;
+float fShapeTime = 0.05f;
+float fRangeMult = 0.6f;
+float fTimeMult = 1.2f/CBoat::WAKE_LIFETIME;
 
 CBoat *CBoat::apFrameWakeGeneratingBoats[4];
 
@@ -135,9 +135,9 @@ CBoat::ProcessControl(void)
 		m_fBuoyancy *= 0.99f;
 
 #ifdef FIX_BUGS
-	if(FindPlayerPed() && FindPlayerPed()->m_pWanted->m_nWantedLevel > 0 && GetModelIndex() == MI_PREDATOR){
+	if(FindPlayerPed() && FindPlayerPed()->m_pWanted->GetWantedLevel() > 0 && GetModelIndex() == MI_PREDATOR){
 #else
-	if(FindPlayerPed()->m_pWanted->m_nWantedLevel > 0 && GetModelIndex() == MI_PREDATOR){
+	if(FindPlayerPed()->m_pWanted->GetWantedLevel() > 0 && GetModelIndex() == MI_PREDATOR){
 #endif
 		CVehicle *playerVeh = FindPlayerVehicle();
 		if(playerVeh && playerVeh->GetVehicleAppearance() == VEHICLE_APPEARANCE_BOAT &&
@@ -158,9 +158,9 @@ CBoat::ProcessControl(void)
 	r = 127.5f*(CTimeCycle::GetAmbientRed_Obj() + 0.5f*CTimeCycle::GetDirectionalRed());
 	g = 127.5f*(CTimeCycle::GetAmbientGreen_Obj() + 0.5f*CTimeCycle::GetDirectionalGreen());
 	b = 127.5f*(CTimeCycle::GetAmbientBlue_Obj() + 0.5f*CTimeCycle::GetDirectionalBlue());
-	r = clamp(r, 0, 255);
-	g = clamp(g, 0, 255);
-	b = clamp(b, 0, 255);
+	r = Clamp(r, 0, 255);
+	g = Clamp(g, 0, 255);
+	b = Clamp(b, 0, 255);
 	splashColor.red = r;
 	splashColor.green = g;
 	splashColor.blue = b;
@@ -169,9 +169,9 @@ CBoat::ProcessControl(void)
 	r = 229.5f*(CTimeCycle::GetAmbientRed() + 0.85f*CTimeCycle::GetDirectionalRed());
 	g = 229.5f*(CTimeCycle::GetAmbientGreen() + 0.85f*CTimeCycle::GetDirectionalGreen());
 	b = 229.5f*(CTimeCycle::GetAmbientBlue() + 0.85f*CTimeCycle::GetDirectionalBlue());
-	r = clamp(r, 0, 255);
-	g = clamp(g, 0, 255);
-	b = clamp(b, 0, 255);
+	r = Clamp(r, 0, 255);
+	g = Clamp(g, 0, 255);
+	b = Clamp(b, 0, 255);
 	jetColor.red = r;
 	jetColor.green = g;
 	jetColor.blue = b;
@@ -387,7 +387,7 @@ CBoat::ProcessControl(void)
 				if(CPad::GetPad(0)->GetHandBrake())
 					steerLoss *= 0.5f;
 				steerFactor -= steerLoss;
-				steerFactor = clamp(steerFactor, 0.0f, 1.0f);
+				steerFactor = Clamp(steerFactor, 0.0f, 1.0f);
 			}
 
 			CVector boundMin = GetColModel()->boundingBox.min;
@@ -771,17 +771,17 @@ CBoat::ProcessControlInputs(uint8 pad)
 		m_nPadID = 3;
 
 	m_fBrake += (CPad::GetPad(pad)->GetBrake()/255.0f - m_fBrake)*0.1f;
-	m_fBrake = clamp(m_fBrake, 0.0f, 1.0f);
+	m_fBrake = Clamp(m_fBrake, 0.0f, 1.0f);
 
 	if(m_fBrake < 0.05f){
 		m_fBrake = 0.0f;
 		m_fAccelerate += (CPad::GetPad(pad)->GetAccelerate()/255.0f - m_fAccelerate)*0.1f;
-		m_fAccelerate = clamp(m_fAccelerate, 0.0f, 1.0f);
+		m_fAccelerate = Clamp(m_fAccelerate, 0.0f, 1.0f);
 	}else
 		m_fAccelerate = -m_fBrake*0.3f;
 
 	m_fSteeringLeftRight += (-CPad::GetPad(pad)->GetSteeringLeftRight()/128.0f - m_fSteeringLeftRight)*0.2f;
-	m_fSteeringLeftRight = clamp(m_fSteeringLeftRight, -1.0f, 1.0f);
+	m_fSteeringLeftRight = Clamp(m_fSteeringLeftRight, -1.0f, 1.0f);
 
 	float steeringSq = m_fSteeringLeftRight < 0.0f ? -SQR(m_fSteeringLeftRight) : SQR(m_fSteeringLeftRight);
 	m_fSteerAngle = pHandling->fSteeringLock * DEGTORAD(steeringSq);
@@ -964,7 +964,14 @@ CBoat::PreRender(void)
 			// FIX: Planes can also be controlled with GetCarGunUpDown
 #ifdef FIX_BUGS
 			static float steeringUpDown = 0.0f;
-			steeringUpDown += ((Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f ? (-CPad::GetPad(0)->GetCarGunUpDown() / 128.0f) : (-CPad::GetPad(0)->GetSteeringUpDown() / 128.0f)) - steeringUpDown) * Min(1.f, CTimer::GetTimeStep() / 5.f);
+#ifdef FREE_CAM
+			if(!CCamera::bFreeCam || (CCamera::bFreeCam && !CPad::IsAffectedByController))
+#endif
+			steeringUpDown += ((Abs(CPad::GetPad(0)->GetCarGunUpDown()) > 1.0f ? (-CPad::GetPad(0)->GetCarGunUpDown()/128.0f) : (-CPad::GetPad(0)->GetSteeringUpDown()/128.0f)) - steeringUpDown) * Min(1.f, CTimer::GetTimeStep()/5.f);
+#ifdef FREE_CAM
+			else
+				steeringUpDown = -CPad::GetPad(0)->GetSteeringUpDown()/128.0f;
+#endif
 #else
 			float steeringUpDown = -CPad::GetPad(0)->GetSteeringUpDown()/128.0f;
 #endif
@@ -1057,7 +1064,7 @@ CBoat::PreRender(void)
 			rot = CGeneral::LimitRadianAngle(rot);
 			if(rot > HALFPI) rot = PI;
 			else if(rot < -HALFPI) rot = -PI;
-			rot = clamp(rot, -DEGTORAD(63.0f), DEGTORAD(63.0f));
+			rot = Clamp(rot, -DEGTORAD(63.0f), DEGTORAD(63.0f));
 			m_fMovingSpeed += (0.008f * CWeather::Wind + 0.002f) * rot;
 			m_fMovingSpeed *= Pow(0.9985f, CTimer::GetTimeStep())/(500.0f*SQR(m_fMovingSpeed) + 1.0f);
 
@@ -1246,7 +1253,7 @@ CBoat::Teleport(CVector v)
 	CWorld::Add(this);
 }
 
-//--MIAMI: unused
+// unused
 bool
 CBoat::IsSectorAffectedByWake(CVector2D sector, float fSize, CBoat **apBoats)
 {
@@ -1278,7 +1285,7 @@ CBoat::IsSectorAffectedByWake(CVector2D sector, float fSize, CBoat **apBoats)
 	return numVerts != 0;
 }
 
-//--MIAMI: unused
+// unused
 float
 CBoat::IsVertexAffectedByWake(CVector vecVertex, CBoat *pBoat)
 {
@@ -1433,19 +1440,19 @@ CBoat::DoDriveByShootings(void)
 
 	if(lookingLeft || lookingRight){
 		if(lookingLeft){
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_R);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_RIGHT);
 			if(anim)
 				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_L);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_LEFT);
 			if(anim == nil || anim->blendDelta < 0.0f)
-				anim = CAnimManager::AddAnimation(pDriver->GetClump(), ASSOCGRP_STD, ANIM_DRIVEBY_L);
+				anim = CAnimManager::AddAnimation(pDriver->GetClump(), ASSOCGRP_STD, ANIM_STD_CAR_DRIVEBY_LEFT);
 		}else if(pDriver->m_pMyVehicle->pPassengers[0] == nil || TheCamera.Cams[TheCamera.ActiveCam].Mode == CCam::MODE_1STPERSON){
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_L);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_LEFT);
 			if(anim)
 				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_R);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_RIGHT);
 			if(anim == nil || anim->blendDelta < 0.0f)
-				anim = CAnimManager::AddAnimation(pDriver->GetClump(), ASSOCGRP_STD, ANIM_DRIVEBY_R);
+				anim = CAnimManager::AddAnimation(pDriver->GetClump(), ASSOCGRP_STD, ANIM_STD_CAR_DRIVEBY_RIGHT);
 		}
 
 		if (!anim || !anim->IsRunning()) {
@@ -1456,10 +1463,10 @@ CBoat::DoDriveByShootings(void)
 		}
 	}else{
 		weapon->Reload();
-		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_L);
+		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_LEFT);
 		if(anim)
 			anim->blendDelta = -1000.0f;
-		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_DRIVEBY_R);
+		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_RIGHT);
 		if(anim)
 			anim->blendDelta = -1000.0f;
 	}

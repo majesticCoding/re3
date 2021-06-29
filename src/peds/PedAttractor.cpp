@@ -13,8 +13,6 @@ const int gcMaxSizeOfPizzaQueue = 5;
 const int gcMaxSizeOfShelterQueue = 5;
 const int gcMaxSizeOfIceCreamQueue = 1;
 
-//--MIAMI: file done
-
 std::vector<CVector> CPedShelterAttractor::ms_displacements;
 
 CPedAttractorManager* GetPedAttractorManager()
@@ -106,7 +104,7 @@ bool CVehicleToEffect::HasThisEffect(C2dEffect* pEffect) const
 const C2dEffect* CPedAttractorManager::GetEffectForIceCreamVan(CVehicle* pVehicle, const CVector& pos)
 {
 	if (!vVehicleToEffect.empty()) {
-		for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.cbegin(); assoc != vVehicleToEffect.cend(); ++assoc) {
+		for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
 			if (assoc->GetVehicle() == pVehicle)
 				return assoc->ChooseEffect(pos);
 		}
@@ -115,14 +113,18 @@ const C2dEffect* CPedAttractorManager::GetEffectForIceCreamVan(CVehicle* pVehicl
 	CVehicleToEffect effect(pVehicle);
 	vVehicleToEffect.push_back(effect);
 	POP_MEMID();
+#ifdef FIX_BUGS
+	return vVehicleToEffect.back().ChooseEffect(pos);
+#else
 	return effect.ChooseEffect(pos);
+#endif
 }
 
 CVehicle* CPedAttractorManager::GetIceCreamVanForEffect(C2dEffect* pEffect)
 {
 	if (vVehicleToEffect.empty())
 		return nil;
-	for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.cbegin(); assoc != vVehicleToEffect.cend(); ++assoc) {
+	for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end(); ++assoc) {
 		if (assoc->HasThisEffect(pEffect))
 			return assoc->GetVehicle();
 	}
@@ -133,7 +135,7 @@ const CPedAttractor* CPedAttractorManager::FindAssociatedAttractor(const C2dEffe
 {
 	if (vecAttractors.empty())
 		return nil;
-	for (std::vector<CPedAttractor*>::const_iterator attractor = vecAttractors.cbegin(); attractor != vecAttractors.cend(); ++attractor) {
+	for (std::vector<CPedAttractor*>::const_iterator attractor = vecAttractors.begin(); attractor != vecAttractors.end(); ++attractor) {
 		if ((*attractor)->GetEffect() == pEffect)
 			return *attractor;
 	}
@@ -147,7 +149,7 @@ void CPedAttractorManager::RemoveIceCreamVanEffects(C2dEffect* pEffect)
 		return;
 	if (vVehicleToEffect.empty())
 		return;
-	for (std::vector<CVehicleToEffect>::const_iterator assoc = vVehicleToEffect.cbegin(); assoc != vVehicleToEffect.cend();) {
+	for (std::vector<CVehicleToEffect>::iterator assoc = vVehicleToEffect.begin(); assoc != vVehicleToEffect.end();) {
 		if (assoc->GetVehicle() != pVehicle) {
 			++assoc;
 			continue;
@@ -231,7 +233,7 @@ CVector CPedShelterAttractor::GetDisplacement(int32 qid) const
 			float fRandomOffset = CGeneral::GetRandomNumberInRange(0.0f, 2.0f);
 			CVector vecDisplacement(fRandomOffset * Sin(fRandomAngle), fRandomOffset * Cos(fRandomAngle), 0.0f);
 			bool close = false;
-			for (std::vector<CVector>::const_iterator v = ms_displacements.cbegin(); v != ms_displacements.cend(); ++v) {
+			for (std::vector<CVector>::const_iterator v = ms_displacements.begin(); v != ms_displacements.end(); ++v) {
 				if ((*v - vecDisplacement).Magnitude() < 1.0f) {
 					close = true;
 					break;
@@ -267,7 +269,7 @@ void CPedShelterAttractor::ComputeAttractHeading(int32 qid, float& heading) cons
 
 bool CPedAttractor::RegisterPed(CPed* pPed)
 {
-	for (std::vector<CPed*>::const_iterator pPedIt = vApproachingQueue.cbegin(); pPedIt != vApproachingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed) {
 			vApproachingQueue.erase(pPedIt);
 			return false;
@@ -320,7 +322,7 @@ static bool IsPedUsingAttractorOfThisType(int8 type, CPed* pPed)
 
 bool CPedAttractor::DeRegisterPed(CPed* pPed)
 {
-	for (std::vector<CPed*>::const_iterator pPedIt = vApproachingQueue.cbegin(); pPedIt != vApproachingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		if (*pPedIt != pPed)
 			continue;
 		pPed->m_attractor = nil;
@@ -342,12 +344,12 @@ bool CPedAttractor::DeRegisterPed(CPed* pPed)
 
 bool CPedAttractor::BroadcastArrival(CPed* pPed)
 {
-	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.cbegin(); pPedIt != vWaitingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.begin(); pPedIt != vWaitingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed)
 			return false;
 	}
 	vWaitingQueue.push_back(pPed);
-	for (std::vector<CPed*>::const_iterator pPedIt = vApproachingQueue.cbegin(); pPedIt != vApproachingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed) {
 			vApproachingQueue.erase(pPedIt);
 			break;
@@ -402,7 +404,7 @@ bool CPedAttractor::BroadcastDeparture(CPed* pPed)
 			pPed->SetWanderPath(CGeneral::GetNodeHeadingFromVector(-vecQueueDir.y, -vecQueueDir.x));
 		UpdatePedStateOnDeparture(pPed);
 	}
-	vWaitingQueue.erase(vWaitingQueue.cbegin() + qid);
+	vWaitingQueue.erase(vWaitingQueue.begin() + qid);
 	for (std::vector<CPed*>::iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		CPed* pPed = *pPedIt;
 		CVector pos;
@@ -443,7 +445,7 @@ bool CPedShelterAttractor::BroadcastDeparture(CPed* pPed)
 			pPed->SetWanderPath(CGeneral::GetNodeHeadingFromVector(-vecQueueDir.y, -vecQueueDir.x));
 		UpdatePedStateOnDeparture(pPed);
 	}
-	vWaitingQueue.erase(vWaitingQueue.cbegin() + qid);
+	vWaitingQueue.erase(vWaitingQueue.begin() + qid);
 	for (std::vector<CPed*>::iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		CPed* pPed = *pPedIt;
 		CVector pos;
@@ -460,11 +462,11 @@ bool CPedShelterAttractor::BroadcastDeparture(CPed* pPed)
 
 bool CPedAttractor::IsRegisteredWithPed(CPed* pPed) const
 {
-	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.cbegin(); pPedIt != vWaitingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.begin(); pPedIt != vWaitingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed)
 			return true;
 	}
-	for (std::vector<CPed*>::const_iterator pPedIt = vApproachingQueue.cbegin(); pPedIt != vApproachingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::const_iterator pPedIt = vApproachingQueue.begin(); pPedIt != vApproachingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed) {
 			return true;
 		}
@@ -474,7 +476,7 @@ bool CPedAttractor::IsRegisteredWithPed(CPed* pPed) const
 
 bool CPedAttractor::IsInQueue(CPed* pPed) const
 {
-	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.cbegin(); pPedIt != vWaitingQueue.cend(); ++pPedIt) {
+	for (std::vector<CPed*>::const_iterator pPedIt = vWaitingQueue.begin(); pPedIt != vWaitingQueue.end(); ++pPedIt) {
 		if (*pPedIt == pPed)
 			return true;
 	}
@@ -642,7 +644,7 @@ void CPedAttractorManager::ComputeEffectUseDir(const C2dEffect* pEffect, const C
 CPedAttractor* CPedAttractorManager::RegisterPed(CPed* pPed, C2dEffect* pEffect, const CMatrix& matrix, std::vector<CPedAttractor*>& vecAttractors)
 {
 	CPedAttractor* pRegisteredAttractor = nil;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		CPedAttractor* pAttractor = *pAttractorIt;
 		CVector vEffectPos;
 		ComputeEffectPos(pAttractor->GetEffect(), matrix, vEffectPos);
@@ -660,12 +662,12 @@ CPedAttractor* CPedAttractorManager::RegisterPed(CPed* pPed, C2dEffect* pEffect,
 	}
 	PUSH_MEMID(MEMID_PED_ATTR);
 	switch (pEffect->pedattr.type) {
-	case ATTRACTOR_ATM: vecAttractors.push_back(new CPedAtmAttractor(pEffect, matrix, gcMaxSizeOfAtmQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.15f, 0.1f, 0.1f)); break;
-	case ATTRACTOR_SEAT: vecAttractors.push_back(new CPedSeatAttractor(pEffect, matrix, gcMaxSizeOfSeatQueue, 1.0f, 30000.0f, 3000.0f, 0.125f, 0.1f, 0.1f, 0.1f)); break;
-	case ATTRACTOR_STOP: vecAttractors.push_back(new CPedStopAttractor(pEffect, matrix, gcMaxSizeOfStopQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.1f, 0.1f, 0.1f)); break;
-	case ATTRACTOR_PIZZA: vecAttractors.push_back(new CPedPizzaAttractor(pEffect, matrix, gcMaxSizeOfPizzaQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.1f, 0.1f, 0.1f)); break;
-	case ATTRACTOR_SHELTER: vecAttractors.push_back(new CPedShelterAttractor(pEffect, matrix, gcMaxSizeOfShelterQueue, 1.0f, 30000.0f, 3000.0f, 0.5f, 6.28f, 0.1f, 0.1f)); break;
-	case ATTRACTOR_ICECREAM: vecAttractors.push_back(new CPedIceCreamAttractor(pEffect, matrix, gcMaxSizeOfIceCreamQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.3f, 0.1f, 0.1f)); break;
+	case ATTRACTOR_ATM: pRegisteredAttractor = new CPedAtmAttractor(pEffect, matrix, gcMaxSizeOfAtmQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.15f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
+	case ATTRACTOR_SEAT: pRegisteredAttractor = new CPedSeatAttractor(pEffect, matrix, gcMaxSizeOfSeatQueue, 1.0f, 30000.0f, 3000.0f, 0.125f, 0.1f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
+	case ATTRACTOR_STOP: pRegisteredAttractor = new CPedStopAttractor(pEffect, matrix, gcMaxSizeOfStopQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.1f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
+	case ATTRACTOR_PIZZA: pRegisteredAttractor = new CPedPizzaAttractor(pEffect, matrix, gcMaxSizeOfPizzaQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.1f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
+	case ATTRACTOR_SHELTER: pRegisteredAttractor = new CPedShelterAttractor(pEffect, matrix, gcMaxSizeOfShelterQueue, 1.0f, 30000.0f, 3000.0f, 0.5f, 6.28f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
+	case ATTRACTOR_ICECREAM: pRegisteredAttractor = new CPedIceCreamAttractor(pEffect, matrix, gcMaxSizeOfIceCreamQueue, 1.0f, 30000.0f, 3000.0f, 0.2f, 0.3f, 0.1f, 0.1f); vecAttractors.push_back(pRegisteredAttractor); break;
 	}
 	POP_MEMID();
 	if (pRegisteredAttractor)
@@ -678,7 +680,7 @@ bool CPedAttractorManager::DeRegisterPed(CPed* pPed, CPedAttractor* pAttractor, 
 	if (!pAttractor)
 		return false;
 	CPedAttractor* pFound = nil;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			pFound = *pAttractorIt;
 			break;
@@ -689,7 +691,7 @@ bool CPedAttractorManager::DeRegisterPed(CPed* pPed, CPedAttractor* pAttractor, 
 	pFound->DeRegisterPed(pPed);
 	if (pFound->GetNoOfRegisteredPeds() != 0)
 		return true;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			vecAttractors.erase(pAttractorIt);
 			break;
@@ -704,7 +706,7 @@ bool CPedAttractorManager::BroadcastArrival(CPed* pPed, CPedAttractor* pAttracto
 	if (!pAttractor)
 		return false;
 	CPedAttractor* pFound = nil;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			pFound = *pAttractorIt;
 			break;
@@ -721,7 +723,7 @@ bool CPedAttractorManager::BroadcastDeparture(CPed* pPed, CPedAttractor* pAttrac
 	if (!pAttractor)
 		return false;
 	CPedAttractor* pFound = nil;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			pFound = *pAttractorIt;
 			break;
@@ -732,7 +734,7 @@ bool CPedAttractorManager::BroadcastDeparture(CPed* pPed, CPedAttractor* pAttrac
 	pFound->DeRegisterPed(pPed);
 	if (pFound->GetNoOfRegisteredPeds() != 0)
 		return true;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			vecAttractors.erase(pAttractorIt);
 			break;
@@ -746,7 +748,7 @@ bool CPedAttractorManager::IsInQueue(CPed* pPed, CPedAttractor* pAttractor, std:
 {
 	if (!pAttractor)
 		return false;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			return (*pAttractorIt)->IsInQueue(pPed);
 		}
@@ -758,7 +760,7 @@ bool CPedAttractorManager::IsAtHeadOfQueue(CPed* pPed, CPedAttractor* pAttractor
 {
 	if (!pAttractor)
 		return false;
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if (*pAttractorIt == pAttractor) {
 			return (*pAttractorIt)->IsAtHeadOfQueue(pPed);
 		}
@@ -768,7 +770,7 @@ bool CPedAttractorManager::IsAtHeadOfQueue(CPed* pPed, CPedAttractor* pAttractor
 
 bool CPedAttractorManager::IsPedRegistered(CPed* pPed, std::vector<CPedAttractor*>& vecAttractors)
 {
-	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.cbegin(); pAttractorIt != vecAttractors.cend(); ++pAttractorIt) {
+	for (std::vector<CPedAttractor*>::const_iterator pAttractorIt = vecAttractors.begin(); pAttractorIt != vecAttractors.end(); ++pAttractorIt) {
 		if ((*pAttractorIt)->IsRegisteredWithPed(pPed))
 			return true;
 	}

@@ -41,8 +41,6 @@
 #include "Timecycle.h"
 #include "Fluff.h"
 
-// --MIAMI: file done
-
 #define BLOCK_COUNT 22
 #define SIZE_OF_SIMPLEVARS 0xE4
 
@@ -69,16 +67,16 @@ bool StillToFadeOut;
 uint32 TimeStartedCountingForFade;
 uint32 TimeToStayFadedBeforeFadeOut = 1750;
 
-uint32 RadioStationPosition[NUM_RADIOS];
+int32 RadioStationPosition[NUM_RADIOS];
 
 void
 InitRadioStationPositionList()
 {
 	for (int i = 0; i < NUM_RADIOS; i++)
-		RadioStationPosition[i] = 0;
+		RadioStationPosition[i] = -1;
 }
 
-uint32
+int32
 GetSavedRadioStationPosition(int32 station)
 {
 	return RadioStationPosition[station];
@@ -326,6 +324,11 @@ GenericLoad()
 	ReadDataFromBufferPointer(buf, CWeather::OldWeatherType);
 	ReadDataFromBufferPointer(buf, CWeather::NewWeatherType);
 	ReadDataFromBufferPointer(buf, CWeather::ForcedWeatherType);
+#ifdef SECUROM
+	if (CTimer::m_FrameCounter > 72000){
+		buf += align4bytes(4);
+	}
+#endif
 	ReadDataFromBufferPointer(buf, CWeather::InterpolationValue);
 	ReadDataFromBufferPointer(buf, CWeather::WeatherTypeInList);
 #ifdef COMPATIBLE_SAVES
@@ -342,7 +345,11 @@ GenericLoad()
 #endif
 	ReadDataFromBufferPointer(buf, CGame::currArea);
 	ReadDataFromBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+#ifdef LOAD_INI_SETTINGS
+	buf += align4bytes(sizeof(CPad::bInvertLook4Pad));
+#else
 	ReadDataFromBufferPointer(buf, CPad::bInvertLook4Pad);
+#endif
 	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColour);
 	ReadDataFromBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
 	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColourInter);

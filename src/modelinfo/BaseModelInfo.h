@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Collision.h"
+struct CColModel;
 
 #define MAX_MODEL_NAME (21)
 
@@ -38,8 +38,8 @@ public:
 	virtual ~CBaseModelInfo() {}
 	virtual void Shutdown(void);
 	virtual void DeleteRwObject(void) = 0;
-	virtual RwObject *CreateInstance(RwMatrix *) = 0;
 	virtual RwObject *CreateInstance(void) = 0;
+	virtual RwObject *CreateInstance(RwMatrix *) = 0;
 	virtual RwObject *GetRwObject(void) = 0;
 	virtual void SetAnimFile(const char *file) {}
 	virtual void ConvertAnimFileIndex(void) {}
@@ -50,8 +50,8 @@ public:
 	bool IsBuilding(void) { return m_type == MITYPE_SIMPLE || m_type == MITYPE_TIME; }
 	bool IsSimple(void) { return m_type == MITYPE_SIMPLE || m_type == MITYPE_TIME || m_type == MITYPE_WEAPON; }
 	bool IsClump(void) { return m_type == MITYPE_CLUMP || m_type == MITYPE_PED || m_type == MITYPE_VEHICLE;	}
-	char *GetName(void) { return m_name; }
-	void SetName(const char *name) { strncpy(m_name, name, MAX_MODEL_NAME); }
+	char *GetModelName(void) { return m_name; }
+	void SetModelName(const char *name) { strncpy(m_name, name, MAX_MODEL_NAME); }
 	void SetColModel(CColModel *col, bool owns = false){
 		m_colModel = col; m_bOwnsColModel = owns; }
 	CColModel *GetColModel(void) { return m_colModel; }

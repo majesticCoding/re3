@@ -9,8 +9,6 @@
 #include "Credits.h"
 #include "Pad.h"
 
-// --MIAMI: file done
-
 bool CCredits::bCreditsGoing;
 uint32 CCredits::CreditsStartTime;
 
@@ -800,6 +798,9 @@ CCredits::Render(void)
     PrintCreditSpace(1.5f, lineoffset);
     PrintCreditSpace(1.5f, lineoffset);
     CFont::DrawFonts();
+#ifdef CUTSCENE_BORDERS_SWITCH
+    if (CMenuManager::m_PrefsCutsceneBorders)
+#endif
 	if(TheCamera.m_WideScreenOn)
 		TheCamera.DrawBordersForWideScreen();
 

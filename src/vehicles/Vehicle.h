@@ -3,15 +3,15 @@
 #include "Physical.h"
 #include "AutoPilot.h"
 #include "ModelIndices.h"
-#include "AnimManager.h"
-#include "Weapon.h"
+#include "AnimationId.h"
+#include "WeaponType.h"
+#include "Collision.h"
 #include "HandlingMgr.h"
 
 class CPed;
 class CPlayerPed;
 class CCopPed;
 class CFire;
-struct tHandlingData;
 
 enum {
 	RANDOM_VEHICLE = 1,
@@ -266,7 +266,7 @@ public:
 	eCarLock m_nDoorLock;
 	int8 m_nLastWeaponDamage; // see eWeaponType, -1 if no damage
 	CEntity *m_pLastDamageEntity;
-	int8 m_nRadioStation;
+	uint8 m_nRadioStation;
 	uint8 m_bRainAudioCounter;
 	uint8 m_bRainSamplesCounter;
 	uint32 m_nCarHornTimer;
@@ -278,10 +278,10 @@ public:
 	float m_fSteerInput;
 	uint8 m_vehType;
 
-	static void *operator new(size_t);
-	static void *operator new(size_t sz, int slot);
-	static void operator delete(void*, size_t);
-	static void operator delete(void*, int);
+	static void *operator new(size_t) throw();
+	static void *operator new(size_t sz, int slot) throw();
+	static void operator delete(void*, size_t) throw();
+	static void operator delete(void*, int) throw();
 
 	CVehicle(void) {}	// FAKE
 	CVehicle(uint8 CreatedBy);

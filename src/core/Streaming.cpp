@@ -38,8 +38,6 @@
 #include "Frontend.h"
 #include "VarConsole.h"
 
-//--MIAMI: file done (possibly bugs)
-
 bool CStreaming::ms_disableStreaming;
 bool CStreaming::ms_bLoadingBigModel;
 int32 CStreaming::ms_numModelsRequested;
@@ -209,11 +207,15 @@ CStreaming::Init2(void)
 
 	// allocate streaming buffers
 	if(ms_streamingBufferSize & 1) ms_streamingBufferSize++;
+#ifndef ONE_THREAD_PER_CHANNEL
 	ms_pStreamingBuffer[0] = (int8*)RwMallocAlign(ms_streamingBufferSize*CDSTREAM_SECTOR_SIZE, CDSTREAM_SECTOR_SIZE);
 	ms_streamingBufferSize /= 2;
 	ms_pStreamingBuffer[1] = ms_pStreamingBuffer[0] + ms_streamingBufferSize*CDSTREAM_SECTOR_SIZE;
-#ifdef ONE_THREAD_PER_CHANNEL
-	ms_pStreamingBuffer[2] = (int8*)RwMallocAlign(ms_streamingBufferSize*2*CDSTREAM_SECTOR_SIZE, CDSTREAM_SECTOR_SIZE);
+#else
+	ms_pStreamingBuffer[0] = (int8*)RwMallocAlign(ms_streamingBufferSize*2*CDSTREAM_SECTOR_SIZE, CDSTREAM_SECTOR_SIZE);
+	ms_streamingBufferSize /= 2;
+	ms_pStreamingBuffer[1] = ms_pStreamingBuffer[0] + ms_streamingBufferSize*CDSTREAM_SECTOR_SIZE;
+	ms_pStreamingBuffer[2] = ms_pStreamingBuffer[1] + ms_streamingBufferSize*CDSTREAM_SECTOR_SIZE;
 	ms_pStreamingBuffer[3] = ms_pStreamingBuffer[2] + ms_streamingBufferSize*CDSTREAM_SECTOR_SIZE;
 #endif
 	debug("Streaming buffer size is %d sectors", ms_streamingBufferSize);
@@ -482,7 +484,7 @@ GetObjectName(int streamId)
 {
 	static char objname[32];
 	if(streamId < STREAM_OFFSET_TXD)
-		sprintf(objname, "%s.dff", CModelInfo::GetModelInfo(streamId)->GetName());
+		sprintf(objname, "%s.dff", CModelInfo::GetModelInfo(streamId)->GetModelName());
 	else if(streamId >= STREAM_OFFSET_TXD && streamId < STREAM_OFFSET_COL)
 		sprintf(objname, "%s.txd", CTxdStore::GetTxdName(streamId-STREAM_OFFSET_TXD));
 	else if(streamId >= STREAM_OFFSET_COL && streamId < STREAM_OFFSET_ANIM)
@@ -577,7 +579,7 @@ CStreaming::ConvertBufferToObject(int8 *buf, int32 streamId)
 		}
 
 		if(!success){
-			debug("Failed to load %s\n", CModelInfo::GetModelInfo(streamId)->GetName());
+			debug("Failed to load %s\n", CModelInfo::GetModelInfo(streamId)->GetModelName());
 			RemoveModel(streamId);
 			ReRequestModel(streamId);
 			RwStreamClose(stream, &mem);
@@ -990,7 +992,7 @@ CStreaming::RequestSpecialModel(int32 modelId, const char *modelName, int32 flag
 
 	mi = CModelInfo::GetModelInfo(modelId);
 	if(strncasecmp("CSPlay", modelName, 6) == 0){
-		char *curname = CModelInfo::GetModelInfo(MI_PLAYER)->GetName();
+		char *curname = CModelInfo::GetModelInfo(MI_PLAYER)->GetModelName();
 		for(int i = 0; CSnames[i][0]; i++){
 			if(strcasecmp(curname, IGnames[i]) == 0){
 				modelName = CSnames[i];
@@ -998,7 +1000,7 @@ CStreaming::RequestSpecialModel(int32 modelId, const char *modelName, int32 flag
 			}
 		}
 	}
-	if(!CGeneral::faststrcmp(mi->GetName(), modelName)){
+	if(!CGeneral::faststrcmp(mi->GetModelName(), modelName)){
 		// Already have the correct name, just request it
 		RequestModel(modelId, flags);
 		return;
@@ -1023,8 +1025,8 @@ CStreaming::RequestSpecialModel(int32 modelId, const char *modelName, int32 flag
 		}
 	}
 
-	strcpy(oldName, mi->GetName());
-	mi->SetName(modelName);
+	strcpy(oldName, mi->GetModelName());
+	mi->SetModelName(modelName);
 
 	// What exactly is going on here?
 	if(CModelInfo::GetModelInfo(oldName, nil)){
@@ -1722,7 +1724,13 @@ CStreaming::StreamVehiclesAndPeds(void)
 		for(i = 0; i < CCarCtrl::TOTAL_CUSTOM_CLASSES; i++){
 			if(CCarCtrl::NumRequestsOfCarRating[i] > maxReq &&
 				((i == 0 && zone.carThreshold[0] != 0) ||
+#ifdef FIX_BUGS
+				(i < CCarCtrl::NUM_CAR_CLASSES && zone.carThreshold[i] != zone.carThreshold[i-1]) ||
+				(i == CCarCtrl::NUM_CAR_CLASSES && zone.boatThreshold[i - CCarCtrl::NUM_CAR_CLASSES] != 0) ||
+				(i > CCarCtrl::NUM_CAR_CLASSES && i < CCarCtrl::TOTAL_CUSTOM_CLASSES && zone.boatThreshold[i - CCarCtrl::NUM_CAR_CLASSES] != zone.boatThreshold[i - CCarCtrl::NUM_CAR_CLASSES - 1]))) {
+#else
 				(i != 0 && zone.carThreshold[i] != zone.carThreshold[i-1]))) {
+#endif
 				maxReq = CCarCtrl::NumRequestsOfCarRating[i];
 				mostRequestedRating = i;
 			}
@@ -1795,11 +1803,11 @@ CStreaming::StreamZoneModels(const CVector &pos)
 			int newMI = CPopulation::ms_pPedGroups[ms_currentPedGrp].models[j];
 			if(newMI != oldMI){
 				RequestModel(newMI, STREAMFLAGS_DEPENDENCY);
-				debug("Request Ped %s\n", CModelInfo::GetModelInfo(newMI)->GetName());
+				debug("Request Ped %s\n", CModelInfo::GetModelInfo(newMI)->GetModelName());
 				if(ms_numPedsLoaded == MAXZONEPEDSLOADED){
 					SetModelIsDeletable(oldMI);
 					SetModelTxdIsDeletable(oldMI);
-					debug("Remove Ped %s\n", CModelInfo::GetModelInfo(oldMI)->GetName());
+					debug("Remove Ped %s\n", CModelInfo::GetModelInfo(oldMI)->GetModelName());
 				}else
 					ms_numPedsLoaded++;
 				timeBeforeNextLoad = 300;
@@ -1865,8 +1873,7 @@ CStreaming::RemoveCurrentZonesModels(void)
 	if (ms_currentPedGrp != -1)
 		for (i = 0; i < NUMMODELSPERPEDGROUP; i++) {
 			ms_bIsPedFromPedGroupLoaded[i] = false;
-			if (CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] != -1 &&
-			    CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] != MI_MALE01) {
+			if (CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] != -1) {
 				SetModelIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
 				SetModelTxdIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
 			}
@@ -2307,9 +2314,10 @@ CStreaming::LoadRequestedModels(void)
 }
 
 
-// Let's load models first, then process it. Unfortunately processing models are still single-threaded.
+// Let's load models in 4 threads; when one of them becomes idle, process the file, and fill thread with another file. Unfortunately processing models are still single-threaded.
 // Currently only supported on POSIX streamer.
-#ifdef ONE_THREAD_PER_CHANNEL
+// WIP - some files are loaded swapped (CdStreamPosix problem?)
+#if 0 //def ONE_THREAD_PER_CHANNEL
 void
 CStreaming::LoadAllRequestedModels(bool priority)
 {
@@ -2328,14 +2336,18 @@ CStreaming::LoadAllRequestedModels(bool priority)
 	int streamIds[ARRAY_SIZE(ms_pStreamingBuffer)];
 	int streamSizes[ARRAY_SIZE(ms_pStreamingBuffer)];
 	int streamPoses[ARRAY_SIZE(ms_pStreamingBuffer)];
-	bool first = true;
+	int readOrder[4] = {-1}; // Channel IDs ordered by read time
+	int readI = 0;
 	int processI = 0;
+	bool first = true;
+
+	// All those "first" checks are because of variables aren't initialized in first pass.
 
 	while (true) {
-		// Enumerate files and start reading
 		for (int i=0; i<ARRAY_SIZE(ms_pStreamingBuffer); i++) {
+
+			// Channel has file to load
 			if (!first && streamIds[i] != -1) {
-				processI = i;
 				continue;
 			}
 
@@ -2348,12 +2360,16 @@ CStreaming::LoadAllRequestedModels(bool priority)
 
 				if (ms_aInfoForModel[streamId].GetCdPosnAndSize(posn, size)) {
 					streamIds[i] = -1;
+
+					// Big file, needs 2 buffer
 					if (size > (uint32)ms_streamingBufferSize) {
 						if (i + 1 == ARRAY_SIZE(ms_pStreamingBuffer))
-							continue;
+							break;
 						else if (!first && streamIds[i+1] != -1)
 							continue;
+
 					} else {
+						// Buffer of current channel is part of a "big file", pass
 						if (i != 0 && streamIds[i-1] != -1 && streamSizes[i-1] > (uint32)ms_streamingBufferSize)
 							continue;
 					}
@@ -2363,8 +2379,18 @@ CStreaming::LoadAllRequestedModels(bool priority)
 					streamIds[i] = streamId;
 					streamSizes[i] = size;
 					streamPoses[i] = posn;
+
+					if (!first)
+						assert(readOrder[readI] == -1);
+
+					//printf("read: order %d, ch %d, id %d, size %d\n", readI, i, streamId, size);
+
 					CdStreamRead(i, ms_pStreamingBuffer[i], imgOffset+posn, size);
-					processI = i;
+					readOrder[readI] = i;
+					if (first && readI+1 != ARRAY_SIZE(readOrder))
+						readOrder[readI+1] = -1;
+
+					readI = (readI + 1) % ARRAY_SIZE(readOrder);
 				} else {
 					ms_aInfoForModel[streamId].RemoveFromList();
 					DecrementRef(streamId);
@@ -2372,33 +2398,40 @@ CStreaming::LoadAllRequestedModels(bool priority)
 					ms_aInfoForModel[streamId].m_loadState = STREAMSTATE_LOADED;
 					streamIds[i] = -1;
 				}
-			} else
+			} else {
 				streamIds[i] = -1;
+				break;
+			}
 		}
 
 		first = false;
+		int nextChannel = readOrder[processI];
 
-		// Now process
-		if (streamIds[processI] == -1) 
+		// Now start processing
+		if (nextChannel == -1 || streamIds[nextChannel] == -1)
 			break;
 
-		// Try again on error
-		while (CdStreamSync(processI) != STREAM_NONE) {
-			CdStreamRead(processI, ms_pStreamingBuffer[processI], imgOffset+streamPoses[processI], streamSizes[processI]);
-		}
-		ms_aInfoForModel[streamIds[processI]].m_loadState = STREAMSTATE_READING;
-		
-		MakeSpaceFor(streamSizes[processI] * CDSTREAM_SECTOR_SIZE);
-		ConvertBufferToObject(ms_pStreamingBuffer[processI], streamIds[processI]);
-		if(ms_aInfoForModel[streamIds[processI]].m_loadState == STREAMSTATE_STARTED)
-			FinishLoadingLargeFile(ms_pStreamingBuffer[processI], streamIds[processI]);
+		//printf("process: order %d, ch %d, id %d\n", processI, nextChannel, streamIds[nextChannel]);
 
-		if(streamIds[processI] < STREAM_OFFSET_TXD){
-			CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(streamIds[processI]);
+		// Try again on error
+		while (CdStreamSync(nextChannel) != STREAM_NONE) {
+			CdStreamRead(nextChannel, ms_pStreamingBuffer[nextChannel], imgOffset+streamPoses[nextChannel], streamSizes[nextChannel]);
+		}
+		ms_aInfoForModel[streamIds[nextChannel]].m_loadState = STREAMSTATE_READING;
+
+		MakeSpaceFor(streamSizes[nextChannel] * CDSTREAM_SECTOR_SIZE);
+		ConvertBufferToObject(ms_pStreamingBuffer[nextChannel], streamIds[nextChannel]);
+		if(ms_aInfoForModel[streamIds[nextChannel]].m_loadState == STREAMSTATE_STARTED)
+			FinishLoadingLargeFile(ms_pStreamingBuffer[nextChannel], streamIds[nextChannel]);
+
+		if(streamIds[nextChannel] < STREAM_OFFSET_TXD){
+			CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(streamIds[nextChannel]);
 			if(mi->IsSimple())
 				mi->m_alpha = 255;
 		}
-		streamIds[processI] = -1;
+		streamIds[nextChannel] = -1;
+		readOrder[processI] = -1;
+		processI = (processI + 1) % ARRAY_SIZE(readOrder);
 	}
 
 	ms_bLoadingBigModel = false;
@@ -2445,7 +2478,7 @@ CStreaming::LoadAllRequestedModels(bool priority)
 				status = CdStreamRead(0, ms_pStreamingBuffer[0], imgOffset+posn, size);
 			while(CdStreamSync(0) || status == STREAM_NONE);
 			ms_aInfoForModel[streamId].m_loadState = STREAMSTATE_READING;
-			
+
 			MakeSpaceFor(size * CDSTREAM_SECTOR_SIZE);
 			ConvertBufferToObject(ms_pStreamingBuffer[0], streamId);
 			if(ms_aInfoForModel[streamId].m_loadState == STREAMSTATE_STARTED)
@@ -2502,7 +2535,7 @@ CStreaming::FlushRequestList(void)
 		next = si->m_next;
 		RemoveModel(si - ms_aInfoForModel);
 	}
-#ifndef _WIN32
+#ifdef FLUSHABLE_STREAMING
 	if(ms_channel[0].state == CHANNELSTATE_READING) {
 		flushStream[0] = 1;
 	}
@@ -3195,7 +3228,7 @@ CStreaming::PrintStreamingBufferState()
 						sprintf(str, "txd %s, refs %d, size %dK, flags 0x%x", CTxdStore::GetTxdName(modelIndex - STREAM_OFFSET_TXD),
 						        CTxdStore::GetNumRefs(modelIndex - STREAM_OFFSET_TXD), 2 * size, streamingInfo->m_flags);
 					else
-						sprintf(str, "model %d,%s, refs%d, size%dK, flags%x", modelIndex, modelInfo->GetName(), modelInfo->GetNumRefs(), 2 * size,
+						sprintf(str, "model %d,%s, refs%d, size%dK, flags%x", modelIndex, modelInfo->GetModelName(), modelInfo->GetNumRefs(), 2 * size,
 						        streamingInfo->m_flags);
 					AsciiToUnicode(str, wstr);
 					CFont::PrintString(24.0f, y, wstr);

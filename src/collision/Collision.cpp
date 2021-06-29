@@ -24,8 +24,6 @@
 #include "Camera.h"
 #include "ColStore.h"
 
-//--MIAMI: file done
-
 #ifdef VU_COLLISION
 #include "VuCollision.h"
 
@@ -93,7 +91,7 @@ CCollision::Update(void)
 {
 }
 
-//--MIAMI: unused
+// unused
 eLevelName
 GetCollisionInSectorList(CPtrList &list)
 {
@@ -110,7 +108,7 @@ GetCollisionInSectorList(CPtrList &list)
 	return LEVEL_GENERIC;
 }
 
-//--MIAMI: unused
+// unused
 // Get a level this sector is in based on collision models
 eLevelName
 GetCollisionInSector(CSector &sect)
@@ -146,11 +144,10 @@ CCollision::SortOutCollisionAfterLoad(void)
 void
 CCollision::LoadCollisionScreen(eLevelName level)
 {
-	static Const char *levelNames[4] = {
+	static Const char *levelNames[] = {
 		"",
 		"IND_ZON",
 		"COM_ZON",
-		"SUB_ZON"
 	};
 
 	// Why twice?
@@ -309,8 +306,16 @@ CCollision::TestLineTriangle(const CColLine &line, const CompressedVector *verts
 	if(plane.CalcPoint(line.p0) * plane.CalcPoint(line.p1) > 0.0f)
 		return false;
 
+	float p0dist = DotProduct(line.p1 - line.p0, normal);
+
+#ifdef FIX_BUGS
+	// line lines in the plane, assume no collision
+	if (p0dist == 0.0f)
+		return false;
+#endif
+
 	// intersection parameter on line
-	t = -plane.CalcPoint(line.p0) / DotProduct(line.p1 - line.p0, normal);
+	t = -plane.CalcPoint(line.p0) / p0dist;
 	// find point of intersection
 	CVector p = line.p0 + (line.p1-line.p0)*t;
 
@@ -507,12 +512,14 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		if(TestLineSphere(*(CColLine*)newline, model.spheres[i]))
 			return true;
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.boxes[i].surface)) continue;
 		if(TestLineBox(*(CColLine*)newline, model.boxes[i]))
 			return true;
 	}
@@ -522,6 +529,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 	VuTriangle vutri;
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -539,6 +547,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 #endif
 	for(; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -876,7 +885,7 @@ CCollision::ProcessLineSphere(const CColLine &line, const CColSphere &sphere, CC
 	return true;
 }
 
-//--MIAMI: unused
+// unused
 bool
 CCollision::ProcessVerticalLineTriangle(const CColLine &line,
 	const CompressedVector *verts, const CColTriangle &tri, const CColTrianglePlane &plane,
@@ -1125,8 +1134,17 @@ CCollision::ProcessLineTriangle(const CColLine &line,
 	if(plane.CalcPoint(line.p0) * plane.CalcPoint(line.p1) > 0.0f)
 		return false;
 
+	float p0dist = DotProduct(line.p1 - line.p0, normal);
+
+#ifdef FIX_BUGS
+	// line lines in the plane, assume no collision
+	if (p0dist == 0.0f)
+		return false;
+#endif
+
 	// intersection parameter on line
-	t = -plane.CalcPoint(line.p0) / DotProduct(line.p1 - line.p0, normal);
+	t = -plane.CalcPoint(line.p0) / p0dist;
+
 	// early out if we're beyond the mindist
 	if(t >= mindist)
 		return false;
@@ -1333,6 +1351,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	float coldist = 1.0f;
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		if(ProcessLineSphere(*(CColLine*)newline, model.spheres[i], point, coldist))
 			point.Set(0, 0, model.spheres[i].surface, model.spheres[i].piece);
 	}
@@ -1348,6 +1367,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	CColTriangle *lasttri = nil;
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -1367,6 +1387,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	float dist;
 	for(; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -1466,13 +1487,13 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 
 	float coldist = 1.0f;
 	for(i = 0; i < model.numSpheres; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.spheres[i].surface)) continue;
 		if(ProcessLineSphere(*(CColLine*)newline, model.spheres[i], point, coldist))
 			point.Set(0, 0, model.spheres[i].surface, model.spheres[i].piece);
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.boxes[i].surface)) continue;
 		if(ProcessLineBox(*(CColLine*)newline, model.boxes[i], point, coldist))
 			point.Set(0, 0, model.boxes[i].surface, model.boxes[i].piece);
 	}
@@ -1484,7 +1505,7 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 		CColTriangle *lasttri = nil;
 		VuTriangle vutri;
 		for(i = 0; i < model.numTriangles; i++){
-			if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+			if(ignoreSeeThrough && IsSeeThroughVertical(model.triangles[i].surface)) continue;
 
 			CColTriangle *tri = &model.triangles[i];
 			model.vertices[tri->a].Unpack(vutri.v0);
@@ -1503,7 +1524,7 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 		CVuVector pnt, normal;
 		float dist;
 		for(; i < model.numTriangles; i++){
-			if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+			if(ignoreSeeThrough && IsSeeThroughVertical(model.triangles[i].surface)) continue;
 
 			CColTriangle *tri = &model.triangles[i];
 			model.vertices[tri->a].Unpack(vutri.v0);
@@ -2094,12 +2115,12 @@ CCollision::DistToLine(const CVector *l0, const CVector *l1, const CVector *poin
 	float dot = DotProduct(*point - *l0, *l1 - *l0);
 	// Between 0 and len we're above the line.
 	// if not, calculate distance to endpoint
-	if(dot <= 0.0f)
-		return (*point - *l0).Magnitude();
-	if(dot >= lensq)
-		return (*point - *l1).Magnitude();
+	if(dot <= 0.0f) return (*point - *l0).Magnitude();
+	if(dot >= lensq) return (*point - *l1).Magnitude();
 	// distance to line
-	return Sqrt((*point - *l0).MagnitudeSqr() - dot*dot/lensq);
+	float distSqr = (*point - *l0).MagnitudeSqr() - dot * dot / lensq;
+	if(distSqr <= 0.f) return 0.f;
+	return Sqrt(distSqr);
 }
 
 // same as above but also return the point on the line

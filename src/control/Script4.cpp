@@ -39,6 +39,7 @@
 #include "World.h"
 #include "Zones.h"
 #include "Bike.h"
+#include "Wanted.h"
 
 #ifdef FIX_BUGS
 static bool IsSlideObjectUsedWrongByScript(const CVector& posTarget, const CVector& slideBy)
@@ -106,7 +107,10 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 			printf("Couldn't find zone - %s\n", zone);
 			return 0;
 		}
-		CTheZones::SetPedGroup(zone_id, ScriptParams[0], ScriptParams[1]);
+		while (zone_id >= 0) {
+			CTheZones::SetPedGroup(zone_id, ScriptParams[0], ScriptParams[1]);
+			zone_id = CTheZones::FindNextZoneByLabelAndReturnIndex(zone, ZONE_INFO);
+		}
 		return 0;
 	}
 	case COMMAND_START_CAR_FIRE:
@@ -745,7 +749,7 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 		CollectParameters(&m_nIp, 2);
 		CPlayerPed* pPlayerPed = CWorld::Players[ScriptParams[0]].m_pPed;
 		script_assert(pPlayerPed);
-		pPlayerPed->m_fArmour = clamp(pPlayerPed->m_fArmour + ScriptParams[1], 0.0f, CWorld::Players[ScriptParams[0]].m_nMaxArmour);
+		pPlayerPed->m_fArmour = Clamp(pPlayerPed->m_fArmour + ScriptParams[1], 0.0f, CWorld::Players[ScriptParams[0]].m_nMaxArmour);
 		return 0;
 	}
 	case COMMAND_ADD_ARMOUR_TO_CHAR:
@@ -753,7 +757,7 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 		CollectParameters(&m_nIp, 2);
 		CPed* pPed = CPools::GetPedPool()->GetAt(ScriptParams[0]);
 		script_assert(pPed);
-		pPed->m_fArmour = clamp(pPed->m_fArmour + ScriptParams[1], 0.0f, 100.0f);
+		pPed->m_fArmour = Clamp(pPed->m_fArmour + ScriptParams[1], 0.0f, 100.0f);
 		return 0;
 	}
 	case COMMAND_OPEN_GARAGE:
@@ -789,20 +793,20 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 			}else{
 				pPed->m_pMyVehicle->RemovePassenger(pPed);
 			}
-			if (pPed->m_vehEnterType) {
+			if (pPed->m_vehDoor) {
 				if (pPed->GetPedState() == PED_EXIT_CAR || pPed->GetPedState() == PED_DRAG_FROM_CAR) {
 					uint8 flags = 0;
 					if (pPed->m_pMyVehicle->IsBike()) {
-						if (pPed->m_vehEnterType == CAR_DOOR_LF ||
-							pPed->m_vehEnterType == CAR_DOOR_RF ||
-							pPed->m_vehEnterType == CAR_WINDSCREEN)
+						if (pPed->m_vehDoor == CAR_DOOR_LF ||
+							pPed->m_vehDoor == CAR_DOOR_RF ||
+							pPed->m_vehDoor == CAR_WINDSCREEN)
 							flags = CAR_DOOR_FLAG_LF | CAR_DOOR_FLAG_RF;
-						else if (pPed->m_vehEnterType == CAR_DOOR_LR ||
-							pPed->m_vehEnterType == CAR_DOOR_RR)
+						else if (pPed->m_vehDoor == CAR_DOOR_LR ||
+							pPed->m_vehDoor == CAR_DOOR_RR)
 							flags = CAR_DOOR_FLAG_LR | CAR_DOOR_FLAG_RR;
 					}
 					else {
-						switch (pPed->m_vehEnterType) {
+						switch (pPed->m_vehDoor) {
 						case CAR_DOOR_LF:
 							flags = pPed->m_pMyVehicle->m_nNumMaxPassengers != 0 ? CAR_DOOR_FLAG_LF : CAR_DOOR_FLAG_LF | CAR_DOOR_FLAG_LR;
 							break;
@@ -818,7 +822,7 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 						}
 					}
 					pPed->m_pMyVehicle->m_nGettingOutFlags &= ~flags;
-					pPed->m_pMyVehicle->ProcessOpenDoor(pPed->m_vehEnterType, NUM_STD_ANIMS, 0.0f);
+					pPed->m_pMyVehicle->ProcessOpenDoor(pPed->m_vehDoor, ANIM_STD_NUM, 0.0f);
 				}
 			}
 		}
@@ -835,7 +839,7 @@ int8 CRunningScript::ProcessCommands800To899(int32 command)
 		pPed->m_pVehicleAnim = nil;
 		pPed->RestartNonPartialAnims();
 		pPed->SetMoveState(PEDMOVE_NONE);
-		CAnimManager::BlendAnimation(pPed->GetClump(), pPed->m_animGroup, ANIM_IDLE_STANCE, 1000.0f);
+		CAnimManager::BlendAnimation(pPed->GetClump(), pPed->m_animGroup, ANIM_STD_IDLE, 1000.0f);
 		pos.z += pPed->GetDistanceFromCentreOfMassToBaseOfModel();
 		pPed->Teleport(pos);
 		CTheScripts::ClearSpaceForMissionEntity(pos, pPed);
@@ -1394,7 +1398,7 @@ int8 CRunningScript::ProcessCommands900To999(int32 command)
 	{
 		CollectParameters(&m_nIp, 1);
 		DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
-		DMAudio.PlayFrontEndTrack(ScriptParams[0] + STREAMED_SOUND_MISSION_COMPLETED - 1, 0);
+		DMAudio.PlayFrontEndTrack(ScriptParams[0] + STREAMED_SOUND_MISSION_COMPLETED - 1, FALSE);
 		return 0;
 	}
 	case COMMAND_CLEAR_AREA:
@@ -1492,7 +1496,7 @@ int8 CRunningScript::ProcessCommands900To999(int32 command)
 		CVehicle* pVehicle = CPools::GetVehiclePool()->GetAt(ScriptParams[0]);
 		script_assert(pVehicle);
 		const CVector& pos = pVehicle->GetPosition();
-		float heading = CGeneral::GetATanOfXY(pos.y - *(float*)&ScriptParams[2], pos.x - *(float*)&ScriptParams[1]) + HALFPI;
+		float heading = CGeneral::GetATanOfXY(pos.x - *(float*)&ScriptParams[1], pos.y - *(float*)&ScriptParams[2]) + HALFPI;
 		if (heading > TWOPI)
 			heading -= TWOPI;
 		pVehicle->SetHeading(heading);
@@ -1808,8 +1812,8 @@ int8 CRunningScript::ProcessCommands900To999(int32 command)
 			return 0;
 		int attempts;
 		int model = -1;
-		int index = CGeneral::GetRandomNumberInRange(0, 50);
-		for (attempts = 0; attempts < 50; attempts++) {
+		int index = CGeneral::GetRandomNumberInRange(0, MAXVEHICLESLOADED);
+		for (attempts = 0; attempts < MAXVEHICLESLOADED; attempts++) {
 			if (model != -1)
 				break;
 			model = CStreaming::ms_vehiclesLoaded[index];

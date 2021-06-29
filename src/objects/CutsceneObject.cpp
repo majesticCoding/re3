@@ -46,7 +46,7 @@ CCutsceneObject::SetModelIndex(uint32 id)
 	CEntity::SetModelIndex(id);
 	assert(RwObjectGetType(m_rwObject) == rpCLUMP);
 	RpAnimBlendClumpInit((RpClump*)m_rwObject);
-	(*RPANIMBLENDCLUMPDATA(m_rwObject))->velocity = &m_vecMoveSpeed;
+	(*RPANIMBLENDCLUMPDATA(m_rwObject))->velocity3d = &m_vecMoveSpeed;
 	(*RPANIMBLENDCLUMPDATA(m_rwObject))->frames[0].flag |= AnimBlendFrameData::VELOCITY_EXTRACTION_3D;
 }
 
@@ -150,9 +150,9 @@ CCutsceneObject::PreRender(void)
 void
 CCutsceneObject::Render(void)
 {
-	RwRenderStateSet(rwRENDERSTATECULLMODE, (void *)rwCULLMODECULLNONE);
+	SetCullMode(rwCULLMODECULLNONE);
 	CObject::Render();
-	RwRenderStateSet(rwRENDERSTATECULLMODE, (void *)rwCULLMODECULLBACK);
+	SetCullMode(rwCULLMODECULLBACK);
 }
 
 bool

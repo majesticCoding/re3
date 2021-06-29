@@ -13,8 +13,6 @@
 #include "Camera.h"
 #include "Particle.h"
 
-// --MIAMI: file done
-
 #define WATERCANNONVERTS 4
 #define WATERCANNONINDEXES 12
 
@@ -134,7 +132,7 @@ void CWaterCannon::Render(void)
 	int16 pointA = m_nCur % NUM_SEGMENTPOINTS;
 	
 	int16 pointB = pointA - 1;
-	if ( (pointA - 1) < 0 )
+	if ( pointB < 0 )
 		pointB += NUM_SEGMENTPOINTS;
 
 	bool bInit = false;
@@ -244,7 +242,7 @@ void CWaterCannon::PushPeds(void)
 								ped->m_vecMoveSpeed.x *= (0.2f / pedSpeed2D);
 								ped->m_vecMoveSpeed.y *= (0.2f / pedSpeed2D);
 							}
-							ped->SetFall(2000, (AnimationId)(localDir + ANIM_KO_SKID_FRONT), 0);
+							ped->SetFall(2000, (AnimationId)(localDir + ANIM_STD_HIGHIMPACT_FRONT), 0);
 							CParticle::AddParticle(PARTICLE_STEAM_NY_SLOWMOTION, ped->GetPosition(), ped->m_vecMoveSpeed * 0.3f, 0, 0.5f);
 							CParticle::AddParticle(PARTICLE_CAR_SPLASH, ped->GetPosition(), ped->m_vecMoveSpeed * -0.3f + CVector(0.f, 0.f, 0.5f), 0, 0.5f,
 								CGeneral::GetRandomNumberInRange(0.f, 10.f), CGeneral::GetRandomNumberInRange(0.f, 90.f), 1);
@@ -309,9 +307,11 @@ void CWaterCannons::Update(void)
 
 void CWaterCannons::Render(void)
 {
+	PUSH_RENDERGROUP("CWaterCannons::Render");
 	for ( int32 i = 0; i < NUM_WATERCANNONS; i++ )
 	{
 		if ( aCannons[i].m_nId != 0 )
 			aCannons[i].Render();
 	}
+	POP_RENDERGROUP();
 }

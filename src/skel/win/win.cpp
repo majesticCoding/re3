@@ -1,8 +1,7 @@
-#if defined RW_D3D9 || defined RWLIBS
+#if defined RW_D3D9 || defined RWLIBS || defined __MWERKS__
 
 #define _WIN32_WINDOWS 0x0500
 #define WINVER 0x0500
-#define DIRECTINPUT_VERSION 0x0800
 
 #include <winerror.h>
 #include <windows.h>
@@ -20,13 +19,11 @@
 #pragma warning( push )
 #pragma warning( disable : 4005)
 
-#ifdef USE_D3D9
-#include <d3d9.h>
-#else
-#include <d3d8.h>
+#ifdef __MWERKS__
+#define MAPVK_VK_TO_CHAR (2) // this is missing from codewarrior win32 headers - but it gets used ... how?
 #endif
+
 #include <ddraw.h>
-#include <dinput.h>
 #include <DShow.h>
 #pragma warning( pop )
 
@@ -41,6 +38,9 @@
 #pragma comment( lib, "strmiids.lib" )
 #pragma comment( lib, "dinput8.lib" )
 
+#define WITHD3D
+#define WITHDINPUT
+#include "common.h"
 #if (defined(_MSC_VER))
 #include <tchar.h>
 #endif /* (defined(_MSC_VER)) */
@@ -52,8 +52,6 @@
 #include "crossplatform.h"
 
 #define MAX_SUBSYSTEMS		(16)
-
-// --MIAMI: file done
 
 static RwBool		  ForegroundApp = TRUE;
 
@@ -83,7 +81,6 @@ static psGlobalType PsGlobal;
 #define JIF(x) if (FAILED(hr=(x))) \
 	{debug(TEXT("FAILED(hr=0x%x) in ") TEXT(#x) TEXT("\n"), hr); return;}
 
-#include "common.h"
 #include "main.h"
 #include "FileMgr.h"
 #include "Text.h"
@@ -94,12 +91,14 @@ static psGlobalType PsGlobal;
 #include "Frontend.h"
 #include "Game.h"
 #include "PCSave.h"
-#include "MemoryCard.h"
-#include "Sprite2d.h"
 #include "AnimViewer.h"
-#include "Font.h"
 #include "MemoryMgr.h"
 
+#ifdef PS2_MENU
+#include "MemoryCard.h"
+#include "Font.h"
+#endif
+	
 VALIDATE_SIZE(psGlobalType, 0x28);
 
 // DirectShow interfaces
@@ -120,6 +119,10 @@ DWORD _dwOperatingSystemVersion;
 
 RwUInt32 gGameState;
 CJoySticks AllValidWinJoys;
+
+#ifdef DETECT_JOYSTICK_MENU
+char gSelectedJoystickName[128] = "";
+#endif
 
 // What is that for anyway?
 #ifndef IMPROVED_VIDEOMODE
@@ -257,6 +260,11 @@ psGrabScreen(RwCamera *pCamera)
 		RwImageSetFromRaster(pImage, pRaster);
 		return pImage;
 	}
+#else
+	rw::Image *image = RwCameraGetRaster(pCamera)->toImage();
+	image->removeMask();
+	if(image)
+		return image;
 #endif
 	return nil;
 }
@@ -574,6 +582,9 @@ _RETEX:
 	}
 }
 
+#ifdef __MWERKS__
+#pragma dont_inline on
+#endif
 void _psPrintCpuInfo()
 {
 	RwUInt32 features	= _psGetCpuFeatures();
@@ -588,6 +599,9 @@ void _psPrintCpuInfo()
 	if ( FeaturesEx & 0x80000000 )
 		debug("with 3DNow");
 }
+#ifdef __MWERKS__
+#pragma dont_inline off
+#endif
 #endif
 
 /*
@@ -901,14 +915,14 @@ void WaitForState(FILTER_STATE State)
  */
 void HandleGraphEvent(void)
 {
-	LONG evCode, evParam1, evParam2;
+	LONG evCode;
+	LONG_PTR evParam1, evParam2;
 	HRESULT hr=S_OK;
 	
 	ASSERT(pME != nil);
 
 	// Process all queued events
-	while (SUCCEEDED(pME->GetEvent(&evCode, (LONG_PTR *)&evParam1,
-		(LONG_PTR *)&evParam2, 0)))
+	while (SUCCEEDED(pME->GetEvent(&evCode, &evParam1, &evParam2, 0)))
 	{
 		// Free memory associated with callback, since we're not using it
 		hr = pME->FreeEventParams(evCode, evParam1, evParam2);
@@ -2146,8 +2160,15 @@ WinMain(HINSTANCE instance,
 	{
 		CFileMgr::SetDirMyDocuments();
 		
+#ifdef LOAD_INI_SETTINGS
+		// At this point InitDefaultControlConfigJoyPad must have set all bindings to default and ms_padButtonsInited to number of detected buttons.
+		// We will load stored bindings below, but let's cache ms_padButtonsInited before LoadINIControllerSettings and LoadSettings clears it,
+		// so we can add new joy bindings **on top of** stored bindings.
+		int connectedPadButtons = ControlsManager.ms_padButtonsInited;
+#endif
+
 		int32 gta3set = CFileMgr::OpenFile("gta_vc.set", "r");
-		
+
 		if ( gta3set )
 		{
 			ControlsManager.LoadSettings(gta3set);
@@ -2155,6 +2176,14 @@ WinMain(HINSTANCE instance,
 		}
 		
 		CFileMgr::SetDir("");
+
+#ifdef LOAD_INI_SETTINGS
+		LoadINIControllerSettings();
+		if (connectedPadButtons != 0) {
+			ControlsManager.InitDefaultControlConfigJoyPad(connectedPadButtons);
+			SaveINIControllerSettings();
+		}
+#endif
 	}
 	
 	SetErrorMode(SEM_FAILCRITICALERRORS);
@@ -2244,7 +2273,7 @@ WinMain(HINSTANCE instance,
 					case GS_START_UP:
 					{
 #ifdef NO_MOVIES
-						gGameState = GS_INIT_ONCE;
+						gGameState = gbNoMovies ? GS_INIT_ONCE : GS_INIT_LOGO_MPEG;
 #else
 						gGameState = GS_INIT_LOGO_MPEG;
 #endif
@@ -2285,8 +2314,11 @@ WinMain(HINSTANCE instance,
 					
 					case GS_INIT_INTRO_MPEG:
 					{
-#ifndef NO_MOVIES
+#ifdef NO_MOVIES
+						if (!gbNoMovies)
+#endif
 						CloseClip();
+#ifndef FIX_BUGS
 						CoUninitialize();
 #endif
 						
@@ -2324,8 +2356,11 @@ WinMain(HINSTANCE instance,
 					
 					case GS_INIT_ONCE:
 					{
-#ifndef NO_MOVIES
+#ifdef NO_MOVIES
+						if (!gbNoMovies)
+#endif
 						CloseClip();
+#ifndef FIX_BUGS
 						CoUninitialize();
 #endif
 						

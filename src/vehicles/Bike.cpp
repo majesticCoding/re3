@@ -36,8 +36,7 @@
 #include "Automobile.h"
 #include "Bike.h"
 #include "Debug.h"
-
-//--MIAMI: file done
+#include "SaveBuf.h"
 
 const uint32 CBike::nSaveStructSize =
 #ifdef COMPATIBLE_SAVES
@@ -534,7 +533,7 @@ CBike::ProcessControl(void)
 			m_fWheelAngle += DEGTORAD(1.0f)*CTimer::GetTimeStep();
 		if(bIsStanding){
 			float f = Pow(0.97f, CTimer::GetTimeStep());
-			m_fLeanLRAngle2 = m_fLeanLRAngle2*f - (Asin(clamp(GetRight().z,-1.0f,1.0f))+DEGTORAD(15.0f))*(1.0f-f);
+			m_fLeanLRAngle2 = m_fLeanLRAngle2*f - (Asin(Clamp(GetRight().z,-1.0f,1.0f))+DEGTORAD(15.0f))*(1.0f-f);
 			m_fLeanLRAngle = m_fLeanLRAngle2;
 		}
 	}else{
@@ -574,7 +573,7 @@ CBike::ProcessControl(void)
 		// Lean forward speed up
 		float savedAirResistance = m_fAirResistance;
 		if(GetStatus() == STATUS_PLAYER && pDriver){
-			CAnimBlendAssociation *assoc = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_FWD);
+			CAnimBlendAssociation *assoc = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_LEANF);
 			if(assoc && assoc->blendAmount > 0.5f &&
 			   assoc->currentTime > 0.06f && assoc->currentTime < 0.14f){
 				m_fAirResistance *= 0.6f;
@@ -1015,7 +1014,7 @@ CBike::ProcessControl(void)
 		// Process leaning
 		float idleAngle = 0.0f;
 		if(pDriver){
-			CAnimBlendAssociation *assoc = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_STILL);
+			CAnimBlendAssociation *assoc = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_READY);
 			if(assoc)
 				idleAngle = DEGTORAD(10.0f) * assoc->blendAmount;
 		}
@@ -1029,9 +1028,9 @@ CBike::ProcessControl(void)
 				lean = DotProduct(m_vecMoveSpeed-initialMoveSpeed, m_vecAvgSurfaceRight);
 			lean /= GRAVITY*Max(CTimer::GetTimeStep(), 0.01f);
 			if(m_wheelStatus[BIKEWHEEL_FRONT] == WHEEL_STATUS_BURST)
-				lean = clamp(lean, -0.4f*pBikeHandling->fMaxLean, 0.4f*pBikeHandling->fMaxLean);
+				lean = Clamp(lean, -0.4f*pBikeHandling->fMaxLean, 0.4f*pBikeHandling->fMaxLean);
 			else
-				lean = clamp(lean, -pBikeHandling->fMaxLean, pBikeHandling->fMaxLean);
+				lean = Clamp(lean, -pBikeHandling->fMaxLean, pBikeHandling->fMaxLean);
 			float f = Pow(pBikeHandling->fDesLean, CTimer::GetTimeStep());
 			m_fLeanLRAngle2 = (Asin(lean) - idleAngle)*(1.0f-f) + m_fLeanLRAngle2*f;
 		}else{
@@ -1054,11 +1053,11 @@ CBike::ProcessControl(void)
 			if(m_aSuspensionSpringRatio[BIKESUSP_R1] < 1.0f || m_aSuspensionSpringRatio[BIKESUSP_R2] < 1.0f){
 				// BUG: this clamp makes no sense and the arguments seem swapped too
 				ApplyTurnForce(contactPoints[BIKESUSP_R1],
-					m_fTurnMass*Sin(m_fBrakeDestabilization)*clamp(fwdSpeed, 0.5f, 0.2f)*0.013f*GetRight()*CTimer::GetTimeStep());
+					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*0.013f*GetRight()*CTimer::GetTimeStep());
 			}else{
 				// BUG: this clamp makes no sense and the arguments seem swapped too
 				ApplyTurnForce(contactPoints[BIKESUSP_R1],
-					m_fTurnMass*Sin(m_fBrakeDestabilization)*clamp(fwdSpeed, 0.5f, 0.2f)*0.003f*GetRight()*CTimer::GetTimeStep());
+					m_fTurnMass*Sin(m_fBrakeDestabilization)*Clamp(fwdSpeed, 0.5f, 0.2f)*0.003f*GetRight()*CTimer::GetTimeStep());
 			}
 		}else
 			m_fBrakeDestabilization = 0.0f;
@@ -1221,7 +1220,7 @@ CBike::ProcessControl(void)
 	// Balance bike
 	if(bBalancedByRider || bIsBeingPickedUp || bIsStanding){
 		float onSideness = DotProduct(GetRight(), m_vecAvgSurfaceNormal);
-		onSideness = clamp(onSideness, -1.0f, 1.0f);
+		onSideness = Clamp(onSideness, -1.0f, 1.0f);
 		CVector worldCOM = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
 		// Keep bike upright
 		if(bBalancedByRider){
@@ -1841,12 +1840,17 @@ CBike::ProcessControlInputs(uint8 pad)
 			0.2f*CTimer::GetTimeStep();
 		nLastControlInput = 0;
 	}
-	m_fSteerInput = clamp(m_fSteerInput, -1.0f, 1.0f);
+	m_fSteerInput = Clamp(m_fSteerInput, -1.0f, 1.0f);
 
 	// Lean forward/backward
-	float updown = -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f + CPad::GetPad(pad)->GetCarGunUpDown()/128.0f;
+	float updown;
+#ifdef FREE_CAM
+	if (CCamera::bFreeCam) updown = CPad::IsAffectedByController ? -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f : CPad::GetPad(pad)->GetCarGunUpDown()/128.0f;
+	else
+#endif
+	updown = -CPad::GetPad(pad)->GetSteeringUpDown()/128.0f + CPad::GetPad(pad)->GetCarGunUpDown()/128.0f;
 	m_fLeanInput += (updown - m_fLeanInput)*0.2f*CTimer::GetTimeStep();
-	m_fLeanInput = clamp(m_fLeanInput, -1.0f, 1.0f);
+	m_fLeanInput = Clamp(m_fLeanInput, -1.0f, 1.0f);
 
 	// Accelerate/Brake
 	float acceleration = (CPad::GetPad(pad)->GetAccelerate() - CPad::GetPad(pad)->GetBrake())/255.0f;
@@ -2031,35 +2035,35 @@ CBike::DoDriveByShootings(void)
 
 	if(lookingLeft || lookingRight || CPad::GetPad(0)->GetCarGunFired()){
 		if(lookingLeft){
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_LHS);
-			if(anim)
-				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FT);
-			if(anim)
-				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
-			if(anim == nil || anim->blendDelta < 0.0f)
-				anim = CAnimManager::AddAnimation(pDriver->GetClump(), m_bikeAnimType, ANIM_BIKE_DRIVEBY_RHS);
-		}else if(lookingRight){
 			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
 			if(anim)
 				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FT);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FORWARD);
 			if(anim)
 				anim->blendDelta = -1000.0f;
 			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_LHS);
 			if(anim == nil || anim->blendDelta < 0.0f)
 				anim = CAnimManager::AddAnimation(pDriver->GetClump(), m_bikeAnimType, ANIM_BIKE_DRIVEBY_LHS);
-		}else{
+		}else if(lookingRight){
 			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_LHS);
 			if(anim)
 				anim->blendDelta = -1000.0f;
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FORWARD);
+			if(anim)
+				anim->blendDelta = -1000.0f;
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
+			if(anim == nil || anim->blendDelta < 0.0f)
+				anim = CAnimManager::AddAnimation(pDriver->GetClump(), m_bikeAnimType, ANIM_BIKE_DRIVEBY_RHS);
+		}else{
 			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
 			if(anim)
 				anim->blendDelta = -1000.0f;
-			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FT);
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_LHS);
+			if(anim)
+				anim->blendDelta = -1000.0f;
+			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FORWARD);
 			if(anim == nil || anim->blendDelta < 0.0f)
-				anim = CAnimManager::AddAnimation(pDriver->GetClump(), m_bikeAnimType, ANIM_BIKE_DRIVEBY_FT);
+				anim = CAnimManager::AddAnimation(pDriver->GetClump(), m_bikeAnimType, ANIM_BIKE_DRIVEBY_FORWARD);
 		}
 
 		if (!anim || !anim->IsRunning()) {
@@ -2070,13 +2074,13 @@ CBike::DoDriveByShootings(void)
 		}
 	}else{
 		weapon->Reload();
-		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
-		if(anim)
-			anim->blendDelta = -1000.0f;
 		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_LHS);
 		if(anim)
 			anim->blendDelta = -1000.0f;
-		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FT);
+		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_RHS);
+		if(anim)
+			anim->blendDelta = -1000.0f;
+		anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_BIKE_DRIVEBY_FORWARD);
 		if(anim)
 			anim->blendDelta = -1000.0f;
 	}
@@ -2543,7 +2547,7 @@ CBike::GetHeightAboveRoad(void)
 void
 CBike::PlayCarHorn(void)
 {
-	int r;
+	uint32 r;
 
 	if (IsAlarmOn() || m_nCarHornTimer != 0)
 		return;
@@ -2570,7 +2574,7 @@ CBike::PlayCarHorn(void)
 void
 CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBackOn)
 {
-	AnimationId anim = ANIM_KO_SHOT_FRONT1;
+	AnimationId anim = ANIM_STD_KO_FRONT;
 	if(ped == nil)
 		return;
 
@@ -2608,8 +2612,8 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 	}
 
 	ped->SetPedState(PED_IDLE);
-	CAnimManager::BlendAnimation(ped->GetClump(), ped->m_animGroup, ANIM_IDLE_STANCE, 100.0f);
-	ped->m_vehEnterType = CAR_DOOR_LF;
+	CAnimManager::BlendAnimation(ped->GetClump(), ped->m_animGroup, ANIM_STD_IDLE, 100.0f);
+	ped->m_vehDoor = CAR_DOOR_LF;
 	CPed::PedSetOutCarCB(nil, ped);
 	ped->SetMoveState(PEDMOVE_STILL);
 	if(GetUp().z < 0.0f)
@@ -2622,14 +2626,14 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 	case WEAPONTYPE_UNIDENTIFIED:
 		ped->m_vecMoveSpeed = m_vecMoveSpeed;
 		ped->m_pCollidingEntity = this;
-		anim = NUM_STD_ANIMS;
+		anim = ANIM_STD_NUM;
 		break;
 
 	case WEAPONTYPE_BASEBALLBAT:
 	default:
 		switch(direction){
 		case 0:
-			anim = ANIM_BIKE_FALL_R;
+			anim = ANIM_STD_BIKE_FALLBACK;
 			ped->m_vecMoveSpeed = CVector(0.0f, 0.0f, 0.1f);
 			if(m_vecMoveSpeed.MagnitudeSqr() < SQR(0.3f))
 				ped->ApplyMoveForce(5.0f*GetUp() - 6.0f*GetForward());
@@ -2638,11 +2642,11 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 		case 1:
 		case 2:
 			if(m_vecMoveSpeed.MagnitudeSqr() > SQR(0.3f)){
-				anim = ANIM_KO_SPIN_R;
+				anim = ANIM_STD_HIGHIMPACT_LEFT;
 				ped->m_vecMoveSpeed = 0.3f*m_vecMoveSpeed;
 				ped->ApplyMoveForce(5.0f*GetUp() + 6.0f*GetRight());
 			}else{
-				anim = ANIM_KD_LEFT;
+				anim = ANIM_STD_SPINFORWARD_LEFT;
 				ped->m_vecMoveSpeed = m_vecMoveSpeed;
 				ped->ApplyMoveForce(4.0f*GetUp() + 8.0f*GetRight());
 			}
@@ -2651,11 +2655,11 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 			break;
 		case 3:
 			if(m_vecMoveSpeed.MagnitudeSqr() > SQR(0.3f)){
-				anim = ANIM_KO_SPIN_L;
+				anim = ANIM_STD_HIGHIMPACT_RIGHT;
 				ped->m_vecMoveSpeed = 0.3f*m_vecMoveSpeed;
 				ped->ApplyMoveForce(5.0f*GetUp() - 6.0f*GetRight());
 			}else{
-				anim = ANIM_KD_RIGHT;
+				anim = ANIM_STD_SPINFORWARD_RIGHT;
 				ped->m_vecMoveSpeed = m_vecMoveSpeed;
 				ped->ApplyMoveForce(4.0f*GetUp() - 8.0f*GetRight());
 			}
@@ -2667,7 +2671,7 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 
 	case WEAPONTYPE_DROWNING:{
 		RwRGBA color;
-		anim = ANIM_FALL_FALL;
+		anim = ANIM_STD_FALL;
 		ped->m_vecMoveSpeed = m_vecMoveSpeed*0.2f;
 		ped->m_vecMoveSpeed.z = 0.0f;
 		ped->m_pCollidingEntity = this;
@@ -2692,10 +2696,10 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 			CGeneral::GetRandomNumberInRange(3.0f, 7.0f));
 		ped->m_pCollidingEntity = this;
 		switch(direction){
-		case 0: anim = ANIM_KO_SKID_BACK; break;
-		case 1: anim = ANIM_KD_RIGHT; break;
-		case 2: anim = ANIM_BIKE_FALL_R; break;
-		case 3: anim = ANIM_KD_LEFT; break;
+		case 0: anim = ANIM_STD_HIGHIMPACT_BACK; break;
+		case 1: anim = ANIM_STD_SPINFORWARD_RIGHT; break;
+		case 2: anim = ANIM_STD_BIKE_FALLBACK; break;
+		case 3: anim = ANIM_STD_SPINFORWARD_LEFT; break;
 		}
 		if(m_nWheelsOnGround == 0)
 			ped->bKnockedOffBike = true;
@@ -2711,10 +2715,10 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 			CGeneral::GetRandomNumberInRange(minForceZ, maxForceZ));
 		ped->m_pCollidingEntity = this;
 		switch(direction){
-		case 0: anim = ANIM_KO_SKID_BACK; break;
-		case 1: anim = ANIM_KD_RIGHT; break;
-		case 2: anim = ANIM_KO_SKID_FRONT; break;
-		case 3: anim = ANIM_KD_LEFT; break;
+		case 0: anim = ANIM_STD_HIGHIMPACT_BACK; break;
+		case 1: anim = ANIM_STD_SPINFORWARD_RIGHT; break;
+		case 2: anim = ANIM_STD_HIGHIMPACT_FRONT; break;
+		case 3: anim = ANIM_STD_SPINFORWARD_LEFT; break;
 		}
 		ped->bKnockedOffBike = true;
 		if(ped->IsPlayer())
@@ -2729,7 +2733,7 @@ CBike::KnockOffRider(eWeaponType weapon, uint8 direction, CPed *ped, bool bGetBa
 		ped->bIsInTheAir = true;
 		ped->bIsInWater = true;
 		ped->bTouchingWater = true;
-		CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_FALL_FALL, 4.0f);
+		CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_STD_FALL, 4.0f);
 	}else if(weapon != WEAPONTYPE_UNARMED){
 		if(ped->m_fHealth > 0.0f)
 			ped->SetFall(1000, anim, 0);

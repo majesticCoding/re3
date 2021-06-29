@@ -6,8 +6,6 @@
 #include "Replay.h"
 #include "Skidmarks.h"
 
-//--MIAMI: file done
-
 CSkidmark CSkidmarks::aSkidmarks[NUMSKIDMARKS];
 
 RwImVertexIndex SkidmarkIndexList[SKIDMARK_LENGTH * 6];
@@ -98,6 +96,8 @@ CSkidmarks::Render(void)
 {
 	int i, j;
 
+	PUSH_RENDERGROUP("CSkidmarks::Render");
+
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
@@ -154,6 +154,8 @@ CSkidmarks::Render(void)
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+
+	POP_RENDERGROUP();
 }
 
 void

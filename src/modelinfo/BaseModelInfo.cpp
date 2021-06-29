@@ -5,8 +5,7 @@
 #include "2dEffect.h"
 #include "BaseModelInfo.h"
 #include "ModelInfo.h"
-
-//--MIAMI: file done
+#include "ColModel.h"
 
 CBaseModelInfo::CBaseModelInfo(ModelInfoType type)
 {
@@ -28,6 +27,7 @@ CBaseModelInfo::Shutdown(void)
 	m_2dEffectsID = -1;
 	m_num2dEffects = 0;
 	m_txdSlot = -1;
+	m_objectId = -1;
 }
 
 void
@@ -58,7 +58,7 @@ void
 CBaseModelInfo::SetTexDictionary(const char *name)
 {
 	int slot = CTxdStore::FindTxdSlot(name);
-	if(slot < 0)
+	if(slot == -1)
 		slot = CTxdStore::AddTxdSlot(name);
 	m_txdSlot = slot;
 }

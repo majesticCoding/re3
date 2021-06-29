@@ -21,8 +21,6 @@
 #include "SpecialFX.h"
 #include "Replay.h"
 
-//--MIAMI: file done
-
 int32 CWeather::SoundHandle = -1;
 
 int32 CWeather::WeatherTypeInList;
@@ -54,7 +52,7 @@ bool CWeather::bScriptsForceRain;
 
 tRainStreak Streaks[NUM_RAIN_STREAKS];
 
-const int16 WeatherTypesList[] = {
+int16 WeatherTypesList[] = {
 	WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY,
 	WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY,
 	WEATHER_SUNNY, WEATHER_SUNNY, WEATHER_SUNNY, WEATHER_EXTRA_SUNNY,
@@ -73,7 +71,7 @@ const int16 WeatherTypesList[] = {
 	WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY
 };
 
-const int16 WeatherTypesList_WithHurricanes[] = {
+int16 WeatherTypesList_WithHurricanes[] = {
 	WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY,
 	WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY, WEATHER_EXTRA_SUNNY,
 	WEATHER_SUNNY, WEATHER_SUNNY, WEATHER_SUNNY, WEATHER_EXTRA_SUNNY,
@@ -139,7 +137,7 @@ void CWeather::Init(void)
 	ForcedWeatherType = WEATHER_RANDOM;
 	SoundHandle = DMAudio.CreateEntity(AUDIOTYPE_WEATHER, (void*)1);
 	if (SoundHandle >= 0)
-		DMAudio.SetEntityStatus(SoundHandle, true);
+		DMAudio.SetEntityStatus(SoundHandle, TRUE);
 }
 
 void CWeather::Update(void)
@@ -283,7 +281,7 @@ void CWeather::Update(void)
 
 	if (SunGlare > 0.0f) {
 		SunGlare *= Min(1.0f, 7.0 * CTimeCycle::GetSunDirection().z);
-		SunGlare = clamp(SunGlare, 0.0f, 1.0f);
+		SunGlare = Clamp(SunGlare, 0.0f, 1.0f);
 		if (!CSpecialFX::bSnapShotActive)
 			SunGlare *= (1.0f - (CGeneral::GetRandomNumber()&0x1F)*0.007f);
 	}
@@ -647,3 +645,18 @@ void CWeather::RenderRainStreaks(void)
 	TempBufferVerticesStored = 0;
 	TempBufferIndicesStored = 0;
 }
+
+#ifdef SECUROM
+void CWeather::ForceHurricaneWeather()
+{
+	for (int i = 0; i < ARRAY_SIZE(WeatherTypesList_WithHurricanes); i++)
+	{
+		WeatherTypesList[i] = WEATHER_HURRICANE;
+		WeatherTypesList_WithHurricanes[i] = WEATHER_HURRICANE;
+	}
+
+	CWeather::OldWeatherType = WEATHER_HURRICANE;
+	CWeather::NewWeatherType = WEATHER_HURRICANE;
+	CWeather::ForcedWeatherType = WEATHER_HURRICANE;
+}
+#endif

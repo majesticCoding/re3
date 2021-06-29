@@ -32,8 +32,6 @@
 #include "Replay.h"
 #endif
 
-//--MIAMI: done
-
 enum
 {
 	HELI_STATUS_HOVER,
@@ -262,7 +260,7 @@ CHeli::ProcessControl(void)
 		// Move up if too low
 		if(GetPosition().z - 2.0f < groundZ && m_heliStatus != HELI_STATUS_SHOT_DOWN)
 			m_vecMoveSpeed.z += CTimer::GetTimeStep()*0.01f;
-		m_vecMoveSpeed.z = clamp(m_vecMoveSpeed.z, -0.3f, 0.3f);
+		m_vecMoveSpeed.z = Clamp(m_vecMoveSpeed.z, -0.3f, 0.3f);
 	}
 
 	float fTargetDist = vTargetDist.Magnitude();
@@ -480,7 +478,7 @@ CHeli::ProcessControl(void)
 			// Shoot
 			int shootTimeout;
 			if (m_heliType == HELI_TYPE_RANDOM) {
-				switch (FindPlayerPed()->m_pWanted->m_nWantedLevel) {
+				switch (FindPlayerPed()->m_pWanted->GetWantedLevel()) {
 				case 0:
 				case 1:
 				case 2: shootTimeout = 999999; break;
@@ -739,7 +737,7 @@ CHeli::SendDownSwat(void)
 		m_numSwat--;
 		swat->m_nRopeID = (uintptr)this + m_numSwat;
 		m_aSwatState[m_numSwat] = 255;
-		CAnimManager::BlendAnimation(swat->GetClump(), ASSOCGRP_STD, ANIM_ABSEIL, 4.0f);
+		CAnimManager::BlendAnimation(swat->GetClump(), ASSOCGRP_STD, ANIM_STD_ABSEIL, 4.0f);
 		return true;
 	}
 	return false;
@@ -762,7 +760,7 @@ CHeli::InitHelis(void)
 }
 
 CHeli*
-GenerateHeli(bool catalina)
+CHeli::GenerateHeli(bool catalina)
 {
 	CHeli *heli;
 	CVector heliPos;
@@ -800,7 +798,7 @@ GenerateHeli(bool catalina)
 		id++;
 		found = true;
 		for(i = 0; i < 4; i++)
-			if(CHeli::pHelis[i] && CHeli::pHelis[i]->m_nHeliId == id)
+			if(pHelis[i] && pHelis[i]->m_nHeliId == id)
 				found = false;
 	}
 	heli->m_nHeliId = id;

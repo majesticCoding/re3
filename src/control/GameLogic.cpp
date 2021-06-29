@@ -30,6 +30,7 @@
 #include "Automobile.h"
 #include "MBlur.h"
 #include "screendroplets.h"
+#include "SaveBuf.h"
 
 uint8 CGameLogic::ActivePlayers;
 uint8 CGameLogic::ShortCutState;
@@ -45,8 +46,6 @@ float CGameLogic::AfterDeathStartPointOrientation[NUM_SHORTCUT_START_POINTS];
 CVector CGameLogic::ShortCutDropOffForMission;
 float CGameLogic::ShortCutDropOffOrientationForMission;
 bool CGameLogic::MissionDropOffReadyToBeUsed;
-
-//--MIAMI: file done
 
 #define SHORTCUT_TAXI_COST (9)
 #define TOTAL_BUSTED_AUDIO (28)
@@ -222,7 +221,7 @@ CGameLogic::Update()
 			pPlayerInfo.m_WBState = WBSTATE_PLAYING;
 			int takeMoney;
 
-			switch (pPlayerInfo.m_pPed->m_pWanted->m_nWantedLevel) {
+			switch (pPlayerInfo.m_pPed->m_pWanted->GetWantedLevel()) {
 			case 0:
 			case 1:
 				takeMoney = 100;
@@ -613,12 +612,12 @@ void
 CGameLogic::Load(uint8* buf, uint32 size)
 {
 INITSAVEBUF
-	NumAfterDeathStartPoints = ReadSaveBuf<uint32>(buf);
+	ReadSaveBuf(&NumAfterDeathStartPoints, buf);
 	for (int i = 0; i < NUM_SHORTCUT_START_POINTS; i++) {
-		AfterDeathStartPoints[i].x = ReadSaveBuf<float>(buf);
-		AfterDeathStartPoints[i].y = ReadSaveBuf<float>(buf);
-		AfterDeathStartPoints[i].z = ReadSaveBuf<float>(buf);
-		AfterDeathStartPointOrientation[i] = ReadSaveBuf<float>(buf);
+		ReadSaveBuf(&AfterDeathStartPoints[i].x, buf);
+		ReadSaveBuf(&AfterDeathStartPoints[i].y, buf);
+		ReadSaveBuf(&AfterDeathStartPoints[i].z, buf);
+		ReadSaveBuf(&AfterDeathStartPointOrientation[i], buf);
 	}
 VALIDATESAVEBUF(size)
 }

@@ -1,6 +1,3 @@
-#pragma warning( push )
-#pragma warning( disable : 4005)
-#pragma warning( pop )
 #include "common.h"
 #include "platform.h"
 
@@ -10,7 +7,6 @@
 #include "Accident.h"
 #include "Antennas.h"
 #include "Bridge.h"
-#include "Camera.h"
 #include "CarCtrl.h"
 #include "CarGen.h"
 #include "CdStream.h"
@@ -69,7 +65,6 @@
 #include "Skidmarks.h"
 #include "SetPieces.h"
 #include "SpecialFX.h"
-#include "Sprite2d.h"
 #include "Stats.h"
 #include "Streaming.h"
 #include "SurfaceTable.h"
@@ -121,7 +116,9 @@ bool8 CGame::VarUpdatePlayerCoords;
 
 int gameTxdSlot;
 
-// --MIAMI: File done
+#ifdef SECUROM
+uint8 gameProcessPirateCheck = 0;
+#endif
 
 bool DoRWStuffStartOfFrame(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
 void DoRWStuffEndOfFrame(void);
@@ -248,10 +245,16 @@ CGame::InitialiseRenderWare(void)
 
 #ifdef LIBRW
 #ifdef PS2_MATFX
-	rw::MatFX::modulateEnvMap = true;
+	rw::MatFX::envMapApplyLight = true;
+	rw::MatFX::envMapUseMatColor = true;
+	rw::MatFX::envMapFlipU = true;
 #else
-	rw::MatFX::modulateEnvMap = false;
+	rw::MatFX::envMapApplyLight = false;
+	rw::MatFX::envMapUseMatColor = false;
+	rw::MatFX::envMapFlipU = false;
 #endif
+	rw::RGBA envcol = { 64, 64, 64, 255 };
+	rw::MatFX::envMapColor = envcol;
 #else
 #ifdef PS2_MATFX
 	ReplaceMatFxCallback();
@@ -384,6 +387,11 @@ bool CGame::Initialise(const char* datFile)
 	CTxdStore::Create(gameTxdSlot);
 	CTxdStore::AddRef(gameTxdSlot);
 
+#ifdef EXTENDED_PIPELINES
+	// for generic fallback
+	CustomPipes::SetTxdFindCallback();
+#endif
+
 	LoadingScreen("Loading the Game", "Loading particles", nil);
 	int particleTxdSlot = CTxdStore::AddTxdSlot("particle");
 	CTxdStore::LoadTxd(particleTxdSlot, "MODELS/PARTICLE.TXD");
@@ -443,10 +451,7 @@ bool CGame::Initialise(const char* datFile)
 
 	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
 	CFileLoader::LoadLevel(datFile);
-#ifdef EXTENDED_PIPELINES
-	// for generic fallback
-	CustomPipes::SetTxdFindCallback();
-#endif
+
 	LoadingScreen("Loading the Game", "Add Particles", nil);
 	CWorld::AddParticles();
 	CVehicleModelInfo::LoadVehicleColours();
@@ -462,7 +467,7 @@ bool CGame::Initialise(const char* datFile)
 	TestModelIndices();
 
 	LoadingScreen("Loading the Game", "Setup water", nil);
-	WaterLevelInitialise("DATA\\WATER.DAT");
+	CWaterLevel::Initialise("DATA\\WATER.DAT");
 	TheConsole.Init();
 	CDraw::SetFOV(120.0f);
 	CDraw::ms_fLODDistance = 500.0f;
@@ -572,7 +577,7 @@ bool CGame::Initialise(const char* datFile)
 #endif
 
 
-	DMAudio.SetStartingTrackPositions(true);
+	DMAudio.SetStartingTrackPositions(TRUE);
 	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
 	return true;
 }
@@ -594,7 +599,6 @@ bool CGame::ShutDown(void)
 	gPhoneInfo.Shutdown();
 	CWeapon::ShutdownWeapons();
 	CPedType::Shutdown();
-	CMBlur::MotionBlurClose();
 	
 	for (int32 i = 0; i < NUMPLAYERS; i++)
 	{
@@ -620,7 +624,7 @@ bool CGame::ShutDown(void)
 	CStreaming::Shutdown();
 	CTxdStore::GameShutdown();
 	CCollision::Shutdown();
-	CWaterLevel::DestroyWavyAtomic();
+	CWaterLevel::Shutdown();
 	CRubbish::Shutdown();
 	CClouds::Shutdown();
 	CShadows::Shutdown();
@@ -629,6 +633,7 @@ bool CGame::ShutDown(void)
 	CWeaponEffects::Shutdown();
 	CParticle::Shutdown();
 	CPools::ShutDown();
+	CHud::ReInitialise();
 	CTxdStore::RemoveTxdSlot(gameTxdSlot);
 	CMBlur::MotionBlurClose();
 	CdStreamRemoveImages();
@@ -845,7 +850,14 @@ void CGame::Process(void)
 		FrontEndMenuManager.Process();
 
 	CTheZones::Update();
-	// DRM call in here
+#ifdef SECUROM
+	if (CTimer::GetTimeInMilliseconds() >= (35 * 60 * 1000) && gameProcessPirateCheck == 0){
+		// if game not pirated
+		// gameProcessPirateCheck = 1;
+		// else
+		gameProcessPirateCheck = 2;
+	}
+#endif
 	uint32 startTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond();
 	CStreaming::Update();
 	uint32 processTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond() - startTime;

@@ -4,7 +4,6 @@
 #include "CopPed.h"
 #include "CutsceneMgr.h"
 #include "DMAudio.h"
-#include "Entity.h"
 #include "EventList.h"
 #include "Explosion.h"
 #include "Fire.h"
@@ -12,11 +11,8 @@
 #include "Glass.h"
 #include "Messages.h"
 #include "ModelIndices.h"
-#include "Object.h"
 #include "ParticleObject.h"
-#include "Ped.h"
 #include "Pickups.h"
-#include "PlayerPed.h"
 #include "Population.h"
 #include "ProjectileInfo.h"
 #include "Record.h"
@@ -25,11 +21,8 @@
 #include "RpAnimBlend.h"
 #include "Shadows.h"
 #include "TempColModels.h"
-#include "Vehicle.h"
 #include "WaterLevel.h"
 #include "World.h"
-
-// --MIAMI: file done
 
 #define OBJECT_REPOSITION_OFFSET_Z 2.0f
 
@@ -72,7 +65,7 @@ CWorld::Initialise()
 void
 CWorld::Add(CEntity *ent)
 {
-	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, true);
+	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, TRUE);
 
 	if(ent->bIsBIGBuilding)
 		ms_bigBuildingsList[ent->m_level].InsertItem(ent);
@@ -87,7 +80,7 @@ CWorld::Add(CEntity *ent)
 void
 CWorld::Remove(CEntity *ent)
 {
-	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, false);
+	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, FALSE);
 
 	if(ent->bIsBIGBuilding)
 		ms_bigBuildingsList[ent->m_level].RemoveItem(ent);
@@ -374,7 +367,7 @@ CWorld::ProcessLineOfSightSectorList(CPtrList &list, const CColLine &line, CColP
 			} else if(e->bUsesCollision)
 				colmodel = CModelInfo::GetModelInfo(e->GetModelIndex())->GetColModel();
 
-			if(colmodel && CCollision::ProcessLineOfSight(line, e->GetMatrix(), *colmodel, point, dist,
+			if(colmodel && CCollision::ProcessLineOfSight(line, e->GetMatrix(), *colmodel, point, mindist,
 			                                              ignoreSeeThrough, ignoreShootThrough))
 				entity = e;
 			if(carTyres && ((CVehicle*)e)->SetUpWheelColModel(&tyreCol) && CCollision::ProcessLineOfSight(line, e->GetMatrix(), tyreCol, tyreColPoint, tyreDist, false, ignoreShootThrough)){
@@ -406,8 +399,8 @@ CWorld::ProcessVerticalLine(const CVector &point1, float z2, CColPoint &point, C
 	CVector point2(point1.x, point1.y, z2);
 	int secX = GetSectorIndexX(point1.x);
 	int secY = GetSectorIndexY(point1.y);
-	secX = clamp(secX, 0, NUMSECTORS_X-1);
-	secY = clamp(secY, 0, NUMSECTORS_Y-1);
+	secX = Clamp(secX, 0, NUMSECTORS_X-1);
+	secY = Clamp(secY, 0, NUMSECTORS_Y-1);
 	return ProcessVerticalLineSector(*GetSector(secX, secY),
 	                                 CColLine(point1, point2), point, entity, checkBuildings, checkVehicles,
 	                                 checkPeds, checkObjects, checkDummies, ignoreSeeThrough, poly);
@@ -473,7 +466,7 @@ CWorld::ProcessVerticalLineSectorList(CPtrList &list, const CColLine &line, CCol
 			e->m_scanCode = GetCurrentScanCode();
 
 			colmodel = CModelInfo::GetModelInfo(e->GetModelIndex())->GetColModel();
-			if(CCollision::ProcessVerticalLine(line, e->GetMatrix(), *colmodel, point, dist,
+			if(CCollision::ProcessVerticalLine(line, e->GetMatrix(), *colmodel, point, mindist,
 			                                   ignoreSeeThrough, false, poly))
 				entity = e;
 		}
@@ -1493,7 +1486,7 @@ CWorld::CallOffChaseForAreaSectorListVehicles(CPtrList &list, float x1, float y1
 				CColModel *pColModel = pVehicle->GetColModel();
 				bool bInsideSphere = false;
 				for(int32 i = 0; i < pColModel->numSpheres; i++) {
-					CVector pos = pVehicle->m_matrix * pColModel->spheres[i].center;
+					CVector pos = pVehicle->GetMatrix() * pColModel->spheres[i].center;
 					float fRadius = pColModel->spheres[i].radius;
 					if(pos.x + fRadius > x1 && pos.x - fRadius < x2 && pos.y + fRadius > y1 &&
 					   pos.y - fRadius < y2)
@@ -1810,7 +1803,7 @@ CWorld::RepositionOneObject(CEntity *pEntity)
 		position.z = FindGroundZFor3DCoord(position.x, position.y,
 			position.z + fHeight, nil) -
 			fBoundingBoxMinZ;
-		pEntity->m_matrix.UpdateRW();
+		pEntity->GetMatrix().UpdateRW();
 		pEntity->UpdateRwFrame();
 	} else if(IsLightThatNeedsRepositioning(modelId)) {
 		CVector position = pEntity->GetMatrix().GetPosition();
@@ -2220,7 +2213,7 @@ CWorld::TriggerExplosionSectorList(CPtrList &list, const CVector &position, floa
 						                    PEDPIECE_TORSO, direction);
 						if(pPed->m_nPedState != PED_DIE)
 							pPed->SetFall(2000,
-							              (AnimationId)(direction + ANIM_KO_SKID_FRONT), 0);
+							              (AnimationId)(direction + ANIM_STD_HIGHIMPACT_FRONT), 0);
 						if(pCreator && pCreator->IsPed()) {
 							eEventType eventType = EVENT_SHOOT_PED;
 							if(pPed->m_nPedType == PEDTYPE_COP) eventType = EVENT_SHOOT_COP;
@@ -2246,8 +2239,12 @@ CWorld::UseDetonator(CEntity *pEntity)
 {
 	int32 i = CPools::GetVehiclePool()->GetSize();
 	while(--i >= 0) {
+#ifdef FIX_BUGS
+		CVehicle* pVehicle = CPools::GetVehiclePool()->GetSlot(i);
+#else
 		CAutomobile *pVehicle = (CAutomobile *)CPools::GetVehiclePool()->GetSlot(i);
-		if(pVehicle && !pVehicle->m_vehType && pVehicle->m_bombType == CARBOMB_REMOTE &&
+#endif
+		if(pVehicle && pVehicle->m_bombType == CARBOMB_REMOTE &&
 		   pVehicle->m_pBombRigger == pEntity) {
 			pVehicle->m_bombType = CARBOMB_NONE;
 			pVehicle->m_nBombTimer = 500;

@@ -137,6 +137,13 @@ enum eMenuSprites
 	MENUSPRITE_DOWNON,
 	MENUSPRITE_UPOFF,
 	MENUSPRITE_UPON,
+#ifdef GAMEPAD_MENU
+	MENUSPRITE_CONTROLLER,
+	MENUSPRITE_ARROWS1,
+	MENUSPRITE_ARROWS2,
+	MENUSPRITE_ARROWS3,
+	MENUSPRITE_ARROWS4,
+#endif
 	NUM_MENU_SPRITES
 };
 
@@ -192,8 +199,10 @@ enum eMenuScreen
 	MENUPAGE_MOUSE_CONTROLS = 31,
 	MENUPAGE_PAUSE_MENU = 32,
 	MENUPAGE_NONE = 33, // Then chooses main menu or pause menu 
-#ifdef LEGACY_MENU_OPTIONS
+#ifdef GAMEPAD_MENU
 	MENUPAGE_CONTROLLER_SETTINGS,
+#endif
+#ifdef LEGACY_MENU_OPTIONS
 	MENUPAGE_DEBUG_MENU,
 	MENUPAGE_CONTROLLER_PC_OLD1,
 	MENUPAGE_CONTROLLER_PC_OLD2,
@@ -206,7 +215,7 @@ enum eMenuScreen
 #ifdef GRAPHICS_MENU_OPTIONS
 	MENUPAGE_GRAPHICS_SETTINGS,
 #endif
-#ifdef DONT_TRUST_RECOGNIZED_JOYSTICKS
+#ifdef DETECT_JOYSTICK_MENU
 	MENUPAGE_DETECT_JOYSTICK,
 #endif
 
@@ -275,7 +284,7 @@ enum eMenuAction
 	MENUACTION_DRAWDIST,
 	MENUACTION_MOUSESENS,
 	MENUACTION_MP3VOLUMEBOOST,
-#ifdef LEGACY_MENU_OPTIONS
+#ifdef GAMEPAD_MENU
 	MENUACTION_CTRLVIBRATION,
 	MENUACTION_CTRLCONFIG,
 #endif
@@ -392,6 +401,7 @@ struct CCustomScreenLayout {
 struct CCFO
 {
 	int8 *value;
+	const char *saveCat;
 	const char *save;
 };
 
@@ -406,11 +416,12 @@ struct CCFOSelect : CCFO
 	bool disableIfGameLoaded;
 
 	CCFOSelect() {};
-	CCFOSelect(int8* value, const char* save, const char** rightTexts, int8 numRightTexts, bool onlyApplyOnEnter, ChangeFunc changeFunc = nil, bool disableIfGameLoaded = false){
+	CCFOSelect(int8* value, const char* saveCat, const char* save, const char** rightTexts, int8 numRightTexts, bool onlyApplyOnEnter, ChangeFunc changeFunc = nil, bool disableIfGameLoaded = false){
 		this->value = value;
 		if (value)
 			this->lastSavedValue = this->displayedValue = *value;
 
+		this->saveCat = saveCat;
 		this->save = save;
 		this->rightTexts = (char**)rightTexts;
 		this->numRightTexts = numRightTexts;
@@ -426,8 +437,9 @@ struct CCFODynamic : CCFO
 	ButtonPressFunc buttonPressFunc;
 
 	CCFODynamic() {};
-	CCFODynamic(int8* value, const char* save, DrawFunc drawFunc, ButtonPressFunc buttonPressFunc){
+	CCFODynamic(int8* value, const char* saveCat, const char* save, DrawFunc drawFunc, ButtonPressFunc buttonPressFunc){
 		this->value = value;
+		this->saveCat = saveCat;
 		this->save = save;
 		this->drawFunc = drawFunc;
 		this->buttonPressFunc = buttonPressFunc;
@@ -581,7 +593,7 @@ public:
 	int8 m_bLanguageLoaded;
 	uint8 m_PrefsAllowNastyGame;
 	int8 m_PrefsMP3BoostVolume;
-	uint8 m_ControlMethod;
+	int8 m_ControlMethod;
 	int32 m_nPrefsVideoMode;
 	int32 m_nDisplayVideoMode;
 	int32 m_nMouseTempPosX;
@@ -661,10 +673,22 @@ public:
 	int32 m_nSelectedScreenMode;
 #endif
 #ifdef MULTISAMPLING
-	static int8 m_nPrefsMSAALevel;
-	static int8 m_nDisplayMSAALevel;
+	int8 m_nPrefsMSAALevel;
+	int8 m_nDisplayMSAALevel;
 #endif
 
+#ifdef GAMEPAD_MENU
+	enum
+	{
+		CONTROLLER_DUALSHOCK2 = 0,
+		CONTROLLER_DUALSHOCK3,
+		CONTROLLER_DUALSHOCK4,
+		CONTROLLER_XBOX360,
+		CONTROLLER_XBOXONE,
+	};
+
+	int8 m_PrefsControllerType;
+#endif
 	enum LANGUAGE
 	{
 		LANGUAGE_AMERICAN,
@@ -711,7 +735,7 @@ public:
 
 #ifdef XBOX_MESSAGE_SCREEN
 	static uint32 m_nDialogHideTimer;
-	static PauseModeTime m_nDialogHideTimerPauseMode;
+	static uint32 m_nDialogHideTimerPauseMode;
 	static bool m_bDialogOpen;
 	static wchar *m_pDialogText;
 	static bool m_bSaveWasSuccessful;
@@ -785,6 +809,10 @@ public:
 	int8 GetPreviousPageOption();
 	
 	// uint8 GetNumberOfMenuOptions();
+#ifdef GAMEPAD_MENU
+	void LoadController(int8 type);
+	void PrintController(void);
+#endif
 };
 
 #ifndef IMPROVED_VIDEOMODE

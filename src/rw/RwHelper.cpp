@@ -1,16 +1,16 @@
-#if defined RW_D3D9 || defined RWLIBS
 #define WITHD3D
-#endif
 #include "common.h"
 
 #include "Timecycle.h"
 #include "skeleton.h"
 #include "Debug.h"
+#include "MBlur.h"
 #if !defined(FINAL) || defined(DEBUGMENU)
 #include "rtcharse.h"
 #endif
 #ifndef FINAL
 RtCharset *debugCharset;
+bool bDebugRenderGroups;
 #endif
 
 #ifdef PS2_ALPHA_TEST
@@ -103,6 +103,36 @@ SetCullMode(uint32 mode)
 	else
 		RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
 }
+
+#ifndef FINAL
+void
+PushRendergroup(const char *name)
+{
+	if(!bDebugRenderGroups)
+		return;
+#if defined(RW_OPENGL)
+	if(GLAD_GL_KHR_debug)
+		glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, name);
+#elif defined(RW_D3D9)
+	static WCHAR tmp[256];
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, name, -1, tmp, sizeof(tmp));
+	D3DPERF_BeginEvent(0xFFFFFFFF, tmp);
+#endif
+}
+
+void
+PopRendergroup(void)
+{
+	if(!bDebugRenderGroups)
+		return;
+#if defined(RW_OPENGL)
+	if(GLAD_GL_KHR_debug)
+		glPopDebugGroup();
+#elif defined(RW_D3D9)
+	D3DPERF_EndEvent();
+#endif
+}
+#endif
 
 RwFrame*
 GetFirstFrameCallback(RwFrame *child, void *data)
@@ -255,7 +285,8 @@ SkinGetBonePositionsToTable(RpClump *clump, RwV3d *boneTable)
 			parent = stack[sp--];
 		else
 			parent = i;
-		assert(parent >= 0 && parent < numBones);
+
+		//assert(parent >= 0 && parent < numBones);
 	}
 }
 
@@ -263,7 +294,7 @@ RpHAnimAnimation*
 HAnimAnimationCreateForHierarchy(RpHAnimHierarchy *hier)
 {
 	int i;
-#ifdef FIX_BUGS
+#if defined FIX_BUGS || defined LIBRW
 	int numNodes = hier->numNodes*2;	// you're supposed to have at least two KFs per node
 #else
 	int numNodes = hier->numNodes;
@@ -277,7 +308,7 @@ HAnimAnimationCreateForHierarchy(RpHAnimHierarchy *hier)
 		frame->q.real = 1.0f;
 		frame->q.imag.x = frame->q.imag.y = frame->q.imag.z = 0.0f;
 		frame->t.x = frame->t.y = frame->t.z = 0.0f;
-#ifdef FIX_BUGS
+#if defined FIX_BUGS || defined LIBRW
 		// times are subtracted and divided giving NaNs
 		// so they can't both be 0
 		frame->time = i/hier->numNodes;
@@ -483,7 +514,7 @@ CameraSize(RwCamera * camera, RwRect * rect,
 			RwRaster           *zRaster;
 
 			// BUG: game just changes camera raster's sizes, but this is a hack
-#ifdef FIX_BUGS
+#if defined FIX_BUGS || defined LIBRW
 			/*
 			 * Destroy rasters...
 			 */
@@ -549,6 +580,12 @@ CameraSize(RwCamera * camera, RwRect * rect,
 			
 			raster->width = zRaster->width = rect->w;
 			raster->height = zRaster->height = rect->h;
+#endif
+#ifdef FIX_BUGS
+			if(CMBlur::BlurOn){
+				CMBlur::MotionBlurClose();
+				CMBlur::MotionBlurOpen(camera);
+			}
 #endif
 		}
 

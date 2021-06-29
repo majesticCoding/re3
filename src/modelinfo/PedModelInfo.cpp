@@ -10,8 +10,6 @@
 #include "ModelInfo.h"
 #include "custompipes.h"
 
-//--MIAMI: file done
-
 void
 CPedModelInfo::DeleteRwObject(void)
 {
@@ -48,7 +46,7 @@ CPedModelInfo::SetClump(RpClump *clump)
 	if(m_hitColModel == nil)
 		CreateHitColModelSkinned(clump);
 	RpClumpForAllAtomics(m_clump, SetAtomicRendererCB, (void*)CVisibilityPlugins::RenderPedCB);
-	if(strcmp(GetName(), "player") == 0)
+	if(strcmp(GetModelName(), "player") == 0)
 		RpClumpForAllAtomics(m_clump, SetAtomicRendererCB, (void*)CVisibilityPlugins::RenderPlayerCB);
 }
 
@@ -88,6 +86,11 @@ CPedModelInfo::CreateHitColModelSkinned(RpClump *clump)
 
 	for(int i = 0; i < NUMPEDINFONODES; i++){
 		*mat = *invmat;
+
+		// From LCS. Otherwise gives FPE
+#ifdef FIX_BUGS
+		spheres[i].center = CVector(0.0f, 0.0f, 0.0f);
+#else
 		int id = ConvertPedNode2BoneTag(m_pColNodeInfos[i].pedNode);	// this is wrong, wtf R* ???
 		int idx = RpHAnimIDGetIndex(hier, id);
 
@@ -97,6 +100,7 @@ CPedModelInfo::CreateHitColModelSkinned(RpClump *clump)
 		RwV3dTransformPoints(&pos, &pos, 1, mat);
 
 		spheres[i].center = pos + CVector(m_pColNodeInfos[i].x, 0.0f, m_pColNodeInfos[i].z);
+#endif
 		spheres[i].radius = m_pColNodeInfos[i].radius;
 		spheres[i].surface = SURFACE_PED;
 		spheres[i].piece = m_pColNodeInfos[i].pieceType;

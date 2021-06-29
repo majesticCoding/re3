@@ -21,8 +21,6 @@
 #include "Pickups.h"
 #include "Physical.h"
 
-//--MIAMI: file done
-
 #ifdef WALLCLIMB_CHEAT
 bool gGravityCheat;
 #endif
@@ -228,7 +226,7 @@ CPhysical::RemoveAndAdd(void)
 CRect
 CPhysical::GetBoundRect(void)
 {
-	CVector center;
+	CVUVECTOR center;
 	float radius;
 	GetBoundCentre(center);
 	radius = GetBoundRadius();
@@ -464,7 +462,7 @@ CPhysical::ApplyMoveForce(float jx, float jy, float jz)
 void
 CPhysical::ApplyTurnForce(float jx, float jy, float jz, float px, float py, float pz)
 {
-	CVector com = Multiply3x3(m_matrix, m_vecCentreOfMass);
+	CVector com = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
 	CVector turnimpulse = CrossProduct(CVector(px, py, pz)-com, CVector(jx, jy, jz));
 	m_vecTurnSpeed += turnimpulse*(1.0f/m_fTurnMass);
 }
@@ -479,7 +477,7 @@ CPhysical::ApplyFrictionMoveForce(float jx, float jy, float jz)
 void
 CPhysical::ApplyFrictionTurnForce(float jx, float jy, float jz, float px, float py, float pz)
 {
-	CVector com = Multiply3x3(m_matrix, m_vecCentreOfMass);
+	CVector com = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
 	CVector turnimpulse = CrossProduct(CVector(px, py, pz)-com, CVector(jx, jy, jz));
 	m_vecTurnFriction += turnimpulse*(1.0f/m_fTurnMass);
 }
@@ -547,21 +545,21 @@ CPhysical::ApplyGravity(void)
 		return;
 #ifdef WALLCLIMB_CHEAT
 	if (gGravityCheat && this == FindPlayerVehicle()) {
-		static CVector v1(0.0f, 0.0f, 1.0f), v2(0.0f, 0.0f, 1.0f);
-		CVector prop = GetPosition() - (GetUp() + GetUp());
+		static CVector gravityUp(0.0f, 0.0f, 1.0f), surfaceUp(0.0f, 0.0f, 1.0f);
+		CVector belowCar = GetPosition() - 2.0f*GetUp();
 		CColPoint point;
 		CEntity* entity;
-		if (CWorld::ProcessLineOfSight(GetPosition(), prop, point, entity, true, false, false, false, false, false))
-			v2 = point.normal;
+		if (CWorld::ProcessLineOfSight(GetPosition(), belowCar, point, entity, true, false, false, false, false, false))
+			surfaceUp = point.normal;
 		else
-			v2 = CVector(0.0f, 0.0f, 1.0f);
-		float coef = clamp(CTimer::GetTimeStep() * 0.5f, 0.05f, 0.8f);
-		v1 = v1 * (1.0f - coef) + v2 * coef;
-		if (v1.MagnitudeSqr() < 0.1f)
-			v1 = CVector(0.0f, 0.0f, 1.0f);
+			surfaceUp = CVector(0.0f, 0.0f, 1.0f);
+		float t = Clamp(CTimer::GetTimeStep() * 0.5f, 0.05f, 0.8f);
+		gravityUp = gravityUp * (1.0f - t) + surfaceUp * t;
+		if (gravityUp.MagnitudeSqr() < 0.1f)
+			gravityUp = CVector(0.0f, 0.0f, 1.0f);
 		else
-			v1.Normalise();
-		m_vecMoveSpeed -= GRAVITY * CTimer::GetTimeStep() * v1;
+			gravityUp.Normalise();
+		m_vecMoveSpeed -= GRAVITY * CTimer::GetTimeStep() * gravityUp;
 		return;
 	}
 #endif
@@ -883,9 +881,13 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
 				if(B->GetStatus() == STATUS_PLAYER)
 					pointposB *= 0.8f;
 				if(CWorld::bNoMoreCollisionTorque){
-					// BUG: the game actually uses A here, but this can't be right
+#ifdef FIX_BUGS
 					B->ApplyFrictionMoveForce(fB*-0.3f);
 					B->ApplyFrictionTurnForce(fB*-0.3f, pointposB);
+#else
+					A->ApplyFrictionMoveForce(fB*-0.3f);
+					A->ApplyFrictionTurnForce(fB*-0.3f, pointposB);
+#endif
 				}
 			}
 			if(!A->bInfiniteMass){
@@ -1021,7 +1023,7 @@ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CV
 				moveSpeed += vImpulse * (1.0f/m_fMass);
 
 			// ApplyTurnForce
-			CVector com = Multiply3x3(m_matrix, m_vecCentreOfMass);
+			CVector com = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
 			CVector turnimpulse = CrossProduct(pointpos-com, vImpulse);
 			turnSpeed += turnimpulse*(1.0f/m_fTurnMass);
 
@@ -1054,7 +1056,13 @@ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
 		fOtherSpeedA = vOtherSpeedA.Magnitude();
 		fOtherSpeedB = vOtherSpeedB.Magnitude();
 
+#ifdef FIX_BUGS // division by 0
+		frictionDir = vOtherSpeedA;
+		frictionDir.Normalise();
+#else
 		frictionDir = vOtherSpeedA * (1.0f/fOtherSpeedA);
+#endif
+
 		speedSum = (B->m_fMass*fOtherSpeedB + A->m_fMass*fOtherSpeedA)/(B->m_fMass + A->m_fMass);
 		if(fOtherSpeedA > speedSum){
 			impulseA = (speedSum - fOtherSpeedA) * A->m_fMass;
@@ -1084,7 +1092,12 @@ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
 		fOtherSpeedA = vOtherSpeedA.Magnitude();
 		fOtherSpeedB = vOtherSpeedB.Magnitude();
 
+#ifdef FIX_BUGS // division by 0
+		frictionDir = vOtherSpeedA;
+		frictionDir.Normalise();
+#else
 		frictionDir = vOtherSpeedA * (1.0f/fOtherSpeedA);
+#endif
 		float massB = B->GetMass(pointposB, frictionDir);
 		speedSum = (massB*fOtherSpeedB + A->m_fMass*fOtherSpeedA)/(massB + A->m_fMass);
 		if(fOtherSpeedA > speedSum){
@@ -1112,7 +1125,12 @@ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
 		fOtherSpeedA = vOtherSpeedA.Magnitude();
 		fOtherSpeedB = vOtherSpeedB.Magnitude();
 
+#ifdef FIX_BUGS // division by 0
+		frictionDir = vOtherSpeedA;
+		frictionDir.Normalise();
+#else
 		frictionDir = vOtherSpeedA * (1.0f/fOtherSpeedA);
+#endif
 		float massA = A->GetMass(pointposA, frictionDir);
 		speedSum = (B->m_fMass*fOtherSpeedB + massA*fOtherSpeedA)/(B->m_fMass + massA);
 		if(fOtherSpeedA > speedSum){
@@ -1140,7 +1158,12 @@ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
 		fOtherSpeedA = vOtherSpeedA.Magnitude();
 		fOtherSpeedB = vOtherSpeedB.Magnitude();
 
+#ifdef FIX_BUGS // division by 0
+		frictionDir = vOtherSpeedA;
+		frictionDir.Normalise();
+#else
 		frictionDir = vOtherSpeedA * (1.0f/fOtherSpeedA);
+#endif
 		float massA = A->GetMass(pointposA, frictionDir);
 		float massB = B->GetMass(pointposB, frictionDir);
 		speedSum = (massB*fOtherSpeedB + massA*fOtherSpeedA)/(massB + massA);
@@ -1178,7 +1201,12 @@ CPhysical::ApplyFriction(float adhesiveLimit, CColPoint &colpoint)
 
 		fOtherSpeed = vOtherSpeed.Magnitude();
 		if(fOtherSpeed > 0.0f){
+#ifdef FIX_BUGS // division by 0
+			frictionDir = vOtherSpeed;
+			frictionDir.Normalise();
+#else
 			frictionDir = vOtherSpeed * (1.0f/fOtherSpeed);
+#endif
 			// not really impulse but speed
 			// maybe use ApplyFrictionMoveForce instead?
 			fImpulse = -fOtherSpeed;
@@ -1196,7 +1224,12 @@ CPhysical::ApplyFriction(float adhesiveLimit, CColPoint &colpoint)
 
 		fOtherSpeed = vOtherSpeed.Magnitude();
 		if(fOtherSpeed > 0.0f){
+#ifdef FIX_BUGS // division by 0
+			frictionDir = vOtherSpeed;
+			frictionDir.Normalise();
+#else
 			frictionDir = vOtherSpeed * (1.0f/fOtherSpeed);
+#endif
 			fImpulse = -fOtherSpeed * m_fMass;
 			impulseLimit = adhesiveLimit*CTimer::GetTimeStep() * 1.5;
 			if(fImpulse < -impulseLimit) fImpulse = -impulseLimit;
@@ -1226,13 +1259,13 @@ CPhysical::ProcessShiftSectorList(CPtrList *lists)
 	CPhysical *A, *B;
 	CObject *Bobj;
 	bool canshift;
-	CVector center;
+	CVUVECTOR center;
 	float radius;
 
 	int numCollisions;
 	int mostColliding;
 	CColPoint colpoints[MAX_COLLISION_POINTS];
-	CVector shift = { 0.0f, 0.0f, 0.0f };
+	CVector shift = CVector(0.0f, 0.0f, 0.0f);
 	bool doShift = false;
 	CEntity *boat = nil;
 
@@ -1385,7 +1418,7 @@ CPhysical::ProcessCollisionSectorList_SimpleCar(CPtrList *lists)
 {
 	static CColPoint aColPoints[MAX_COLLISION_POINTS];
 	float radius;
-	CVector center;
+	CVUVECTOR center;
 	int listtype;
 	CPhysical *A, *B;
 	int numCollisions;
@@ -1552,7 +1585,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
 {
 	static CColPoint aColPoints[MAX_COLLISION_POINTS];
 	float radius;
-	CVector center;
+	CVUVECTOR center;
 	CPtrList *list;
 	CPhysical *A, *B;
 	CObject *Aobj, *Bobj;
@@ -1691,8 +1724,8 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
 				if(numCollisions <= 0)
 					continue;
 
-				CVector moveSpeed = { 0.0f, 0.0f, 0.0f };
-				CVector turnSpeed = { 0.0f, 0.0f, 0.0f };
+				CVector moveSpeed = CVector(0.0f, 0.0f, 0.0f);
+				CVector turnSpeed = CVector(0.0f, 0.0f, 0.0f);
 				float maxImpulseA = 0.0f;
 				numResponses = 0;
 				if(A->bHasContacted){
@@ -2176,8 +2209,8 @@ CPhysical::ProcessCollision(void)
 	}else if(IsObject() && ((CObject*)this)->ObjectCreatedBy != TEMP_OBJECT){
 		int responsecase = ((CObject*)this)->m_nSpecialCollisionResponseCases;
 		if(responsecase == COLLRESPONSE_LAMPOST){
-			CVector speedUp = { 0.0f, 0.0f, 0.0f };
-			CVector speedDown = { 0.0f, 0.0f, 0.0f };
+			CVector speedUp = CVector(0.0f, 0.0f, 0.0f);
+			CVector speedDown = CVector(0.0f, 0.0f, 0.0f);
 			CColModel *colModel = GetColModel();
 			speedUp.z = colModel->boundingBox.max.z;
 			speedDown.z = colModel->boundingBox.min.z;

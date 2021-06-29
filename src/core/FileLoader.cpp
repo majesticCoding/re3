@@ -30,8 +30,6 @@
 #include "ColStore.h"
 #include "Occlusion.h"
 
-//--MIAMI: file done
-
 char CFileLoader::ms_line[256];
 
 const char*
@@ -319,6 +317,7 @@ CFileLoader::LoadCollisionModel(uint8 *buf, CColModel &model, char *modelname)
 	buf += 4;
 	if(model.numLines > 0){
 		//model.lines = (CColLine*)RwMalloc(model.numLines*sizeof(CColLine));
+		REGISTER_MEMPTR(&model.lines);
 		for(i = 0; i < model.numLines; i++){
 			//model.lines[i].Set(*(CVector*)buf, *(CVector*)(buf+12));
 			buf += 24;
@@ -492,7 +491,7 @@ bool
 CFileLoader::StartLoadClumpFile(RwStream *stream, uint32 id)
 {
 	if(RwStreamFindChunk(stream, rwID_CLUMP, nil, nil)){
-		printf("Start loading %s\n", CModelInfo::GetModelInfo(id)->GetName());
+		printf("Start loading %s\n", CModelInfo::GetModelInfo(id)->GetModelName());
 		return RpClumpGtaStreamRead1(stream);
 	}else{
 		printf("FAILED\n");
@@ -506,7 +505,7 @@ CFileLoader::FinishLoadClumpFile(RwStream *stream, uint32 id)
 	RpClump *clump;
 	CClumpModelInfo *mi;
 
-	printf("Finish loading %s\n", CModelInfo::GetModelInfo(id)->GetName());
+	printf("Finish loading %s\n", CModelInfo::GetModelInfo(id)->GetModelName());
 	clump = RpClumpGtaStreamRead2(stream);
 
 	if(clump){
@@ -739,7 +738,7 @@ CFileLoader::LoadObject(const char *line)
 	}
 
 	mi = CModelInfo::AddSimpleModel(id);
-	mi->SetName(model);
+	mi->SetModelName(model);
 	mi->SetNumAtomics(numObjs);
 	mi->SetLodDistances(dist);
 	SetModelInfoFlags(mi, flags);
@@ -787,7 +786,7 @@ CFileLoader::LoadTimeObject(const char *line)
 	}
 
 	mi = CModelInfo::AddTimeModel(id);
-	mi->SetName(model);
+	mi->SetModelName(model);
 	mi->SetNumAtomics(numObjs);
 	mi->SetLodDistances(dist);
 	SetModelInfoFlags(mi, flags);
@@ -813,7 +812,7 @@ CFileLoader::LoadWeaponObject(const char *line)
 	sscanf(line, "%d %s %s %s %d %f", &id, model, txd, animFile, &numObjs, &dist);
 
 	mi = CModelInfo::AddWeaponModel(id);
-	mi->SetName(model);
+	mi->SetModelName(model);
 	mi->SetNumAtomics(1);
 	mi->m_lodDistances[0] = dist;
 	mi->SetTexDictionary(txd);
@@ -832,7 +831,7 @@ CFileLoader::LoadClumpObject(const char *line)
 
 	if(sscanf(line, "%d %s %s", &id, model, txd) == 3){
 		mi = CModelInfo::AddClumpModel(id);
-		mi->SetName(model);
+		mi->SetModelName(model);
 		mi->SetTexDictionary(txd);
 		mi->SetColModel(&CTempColModels::ms_colModelBBox);
 	}
@@ -856,7 +855,7 @@ CFileLoader::LoadVehicleObject(const char *line)
 		&frequency, &level, &comprules, &misc, &wheelScale);
 
 	mi = CModelInfo::AddVehicleModel(id);
-	mi->SetName(model);
+	mi->SetModelName(model);
 	mi->SetTexDictionary(txd);
 	mi->SetAnimFile(animFile);
 	for(p = gamename; *p; p++)
@@ -935,7 +934,7 @@ CFileLoader::LoadPedObject(const char *line)
 		  animFile, &radio1, &radio2);
 
 	mi = CModelInfo::AddPedModel(id);
-	mi->SetName(model);
+	mi->SetModelName(model);
 	mi->SetTexDictionary(txd);
 	mi->SetAnimFile(animFile);
 	mi->SetColModel(&CTempColModels::ms_colModelPed1);
@@ -1075,7 +1074,7 @@ CFileLoader::Load2dEffect(const char *line)
 			&probability);
 		effect->attractor.type = flags;
 #ifdef FIX_BUGS
-		effect->attractor.probability = clamp(probability, 0, 255);
+		effect->attractor.probability = Clamp(probability, 0, 255);
 #else
 		effect->attractor.probability = probability;
 #endif
@@ -1205,9 +1204,9 @@ CFileLoader::LoadObjectInstance(const char *line)
 	assert(mi->IsSimple());
 
 	if(!CStreaming::IsObjectInCdImage(id))
-		debug("Not in cdimage %s\n", mi->GetName());
+		debug("Not in cdimage %s\n", mi->GetModelName());
 
-	angle = -RADTODEG(2.0f * acosf(angle));
+	angle = -RADTODEG(2.0f * Acos(angle));
 	xform = RwMatrixCreate();
 	RwMatrixRotate(xform, &axis, angle, rwCOMBINEREPLACE);
 	RwMatrixTranslate(xform, &trans, rwCOMBINEPOSTCONCAT);
@@ -1309,7 +1308,7 @@ CFileLoader::LoadOcclusionVolume(const char *line)
 }
 
 
-//--MIAMI: unused
+// unused
 void
 CFileLoader::ReloadPaths(const char *filename)
 {
@@ -1438,7 +1437,7 @@ CFileLoader::ReloadObject(const char *line)
 #ifdef FIX_BUGS
 		mi &&
 #endif
-	    mi->GetModelType() == MITYPE_SIMPLE && !strcmp(mi->GetName(), model) && mi->m_numAtomics == numObjs) {
+	    mi->GetModelType() == MITYPE_SIMPLE && !strcmp(mi->GetModelName(), model) && mi->m_numAtomics == numObjs) {
 		mi->SetLodDistances(dist);
 		SetModelInfoFlags(mi, flags);
 	} else {

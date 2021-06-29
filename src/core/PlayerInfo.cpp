@@ -35,8 +35,6 @@
 #include "Automobile.h"
 #include "GameLogic.h"
 
-// --MIAMI: File done
-
 CVector lastPlayerPos;
 
 void
@@ -132,7 +130,7 @@ CPlayerInfo::Process(void)
 		CAutomobile *car = (CAutomobile*)m_pPed->m_pMyVehicle;
 
 		if (car->m_nWheelsOnGround < 3)
-			m_nTimeNotFullyOnGround += CTimer::GetTimeInMilliseconds();
+			m_nTimeNotFullyOnGround += CTimer::GetTimeStepInMilliseconds();
 		else
 			m_nTimeNotFullyOnGround = 0;
 
@@ -301,7 +299,7 @@ CPlayerInfo::Process(void)
 		m_fRoadDensity = ThePaths.CalcRoadDensity(playerPos.x, playerPos.y);
 	}
 
-	m_fRoadDensity = clamp(m_fRoadDensity, 0.5f, 1.45f);
+	m_fRoadDensity = Clamp(m_fRoadDensity, 0.5f, 1.45f);
 
 	// Because vehicle enter/exit use same key binding.
 	bool enterOrExitVeh;
@@ -390,8 +388,8 @@ CPlayerInfo::Process(void)
 						m_pPed->SetObjective(OBJECTIVE_ENTER_CAR_AS_PASSENGER, carBelow);
 					} else if (carBelow->IsBoat()) {
 						if (!carBelow->pDriver) {
-							m_pPed->m_vehEnterType = 0;
-							m_pPed->SetEnterCar(carBelow, m_pPed->m_vehEnterType);
+							m_pPed->m_vehDoor = 0;
+							m_pPed->SetEnterCar(carBelow, m_pPed->m_vehDoor);
 						}
 					} else {
 						m_pPed->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, carBelow);
@@ -481,7 +479,7 @@ CPlayerInfo::Process(void)
 		CStats::DistanceTravelledOnFoot += FindPlayerPed()->m_fDistanceTravelled;
 	}
 
-	if (m_pPed->m_pWanted->m_nWantedLevel && !CTheScripts::IsPlayerOnAMission()) {
+	if (m_pPed->m_pWanted->GetWantedLevel() && !CTheScripts::IsPlayerOnAMission()) {
 		float maxDelta = 0.0f;
 		static bool movedSignificantly = true;
 		static bool thereIsACarPathNear = true;
@@ -493,7 +491,7 @@ CPlayerInfo::Process(void)
 			lastPlayerPos = FindPlayerCoors();
 			thereIsACarPathNear = ThePaths.FindNodeClosestToCoors(FindPlayerCoors(), PATH_CAR, 60.0f, true, false, false, false) != 0;
 		}
-		switch (m_pPed->m_pWanted->m_nWantedLevel) {
+		switch (m_pPed->m_pWanted->GetWantedLevel()) {
 			case 1:
 				maxDelta = 31.f;
 				break;

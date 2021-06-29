@@ -95,8 +95,8 @@ int8 CRunningScript::ProcessCommands1200To1299(int32 command)
 		CollectParameters(&m_nIp, 2);
 		CPed* pPed = CPools::GetPedPool()->GetAt(ScriptParams[0]);
 		script_assert(pPed);
-		ScriptParams[0] = pPed->GetWeapon(ScriptParams[1]).m_eWeaponType;
-		ScriptParams[1] = pPed->GetWeapon(ScriptParams[1]).m_nAmmoTotal;
+		ScriptParams[0] = pPed->GetWeapon(ScriptParams[1] - 1).m_eWeaponType;
+		ScriptParams[1] = pPed->GetWeapon(ScriptParams[1] - 1).m_nAmmoTotal;
 		ScriptParams[2] = CPickups::ModelForWeapon((eWeaponType)ScriptParams[0]);
 		StoreParameters(&m_nIp, 3);
 		return 0;
@@ -431,12 +431,12 @@ int8 CRunningScript::ProcessCommands1200To1299(int32 command)
 		CPed* pPed = CPools::GetPedPool()->GetAt(ScriptParams[0]);
 		script_assert(pPed);
 		if (ScriptParams[1]) {
-			pPed->bIsDucking = true;
+			pPed->bCrouchWhenShooting = true;
 			pPed->SetDuck(ScriptParams[2], true);
 		}
 		else {
 			pPed->ClearDuck(true);
-			pPed->bIsDucking = false;
+			pPed->bCrouchWhenShooting = false;
 		}
 		return 0;
 	}
@@ -625,7 +625,7 @@ int8 CRunningScript::ProcessCommands1200To1299(int32 command)
 			key[i] = tolower(key[i]);
 		CPed* pPed = CWorld::Players[ScriptParams[0]].m_pPed;
 		script_assert(pPed);
-		UpdateCompareFlag(strcmp(key, CModelInfo::GetModelInfo(pPed->GetModelIndex())->GetName()) == 0);
+		UpdateCompareFlag(strcmp(key, CModelInfo::GetModelInfo(pPed->GetModelIndex())->GetModelName()) == 0);
 		return 0;
 	}
 	case COMMAND_SET_PLAYER_CAN_DO_DRIVE_BY:
@@ -793,6 +793,7 @@ int8 CRunningScript::ProcessCommands1300To1399(int32 command)
 		CVehicle* pVehicle = CPools::GetVehiclePool()->GetAt(ScriptParams[0]);
 		script_assert(pVehicle);
 		pVehicle->bIsFrozen = ScriptParams[1];
+		pVehicle->bInfiniteMass = ScriptParams[1];
 		return 0;
 	}
 	case COMMAND_HAS_CHAR_BEEN_DAMAGED_BY_CHAR:
@@ -1104,6 +1105,7 @@ int8 CRunningScript::ProcessCommands1300To1399(int32 command)
 		CObject* pObject = CPools::GetObjectPool()->GetAt(ScriptParams[0]);
 		script_assert(pObject);
 		pObject->bIsFrozen = ScriptParams[1];
+		pObject->bInfiniteMass = ScriptParams[1];
 		return 0;
 	}
 	case COMMAND_SET_PLAYER_HAS_MET_DEBBIE_HARRY:

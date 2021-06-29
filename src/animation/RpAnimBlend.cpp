@@ -12,8 +12,6 @@
 #include "RpAnimBlend.h"
 #include "PedModelInfo.h"
 
-//--MIAMI: file done
-
 RwInt32 ClumpOffset;
 
 enum
@@ -437,7 +435,7 @@ RpAnimBlendNodeUpdateKeyframes(AnimBlendFrameData *frames, AnimBlendFrameUpdateD
 		CAnimBlendAssociation *a = (*node)->association;
 		for(i = 0; i < numNodes; i++)
 			if((frames[i].flag & AnimBlendFrameData::VELOCITY_EXTRACTION) == 0 ||
-			   gpAnimBlendClump->velocity == nil){
+			   gpAnimBlendClump->velocity2d == nil){
 				if((*node)[i].sequence)
 					(*node)[i].FindKeyFrame(a->currentTime - a->timeStep);
 			}
