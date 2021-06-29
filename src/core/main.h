@@ -1,5 +1,16 @@
 #pragma once
 
+#ifndef FINAL
+// defined in RwHelpder.cpp
+void PushRendergroup(const char *name);
+void PopRendergroup(void);
+#define PUSH_RENDERGROUP(str) PushRendergroup(str)
+#define POP_RENDERGROUP() PopRendergroup()
+#else
+#define PUSH_RENDERGROUP(str)
+#define POP_RENDERGROUP()
+#endif
+
 struct GlobalScene
 {
 	RpWorld *world;
@@ -45,11 +56,21 @@ void TheModelViewer(void);
 #endif
 
 #ifdef LOAD_INI_SETTINGS
-void LoadINISettings();
+bool LoadINISettings();
 void SaveINISettings();
+void LoadINIControllerSettings();
+void SaveINIControllerSettings();
 #endif
 
 #ifdef NEW_RENDERER
 extern bool gbNewRenderer;
 bool FredIsInFirstPersonCam(void);
+#endif
+
+#ifdef DRAW_GAME_VERSION_TEXT
+extern bool gbDrawVersionText;
+#endif
+
+#ifdef NO_MOVIES
+extern bool gbNoMovies;
 #endif

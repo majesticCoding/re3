@@ -193,7 +193,7 @@ CCam::Process(void)
 		break;
 	case MODE_CAM_ON_A_STRING:
 #ifdef FREE_CAM
-		if(CCamera::bFreeCam)
+		if(CCamera::bFreeCam && !CVehicle::bCheat5)
 			Process_FollowCar_SA(CameraTarget, TargetOrientation, SpeedVar, TargetSpeedVar);
 		else
 #endif
@@ -946,7 +946,7 @@ CVector
 CCam::DoAverageOnVector(const CVector &vec)
 {
 	int i;
-	CVector Average = { 0.0f, 0.0f, 0.0f };
+	CVector Average(0.0f, 0.0f, 0.0f);
 
 	if(ResetStatics){
 		m_iRunningVectorArrayPos = 0;
@@ -1644,10 +1644,10 @@ CCam::Process_FollowPedWithMouse(const CVector &CameraTarget, float TargetOrient
 
 	if(CamTargetEntity->m_rwObject){
 		// what's going on here?
-		if(RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_WEAPON_PUMP) ||
-		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_WEAPON_THROW) ||
-		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_WEAPON_THROWU) ||
-		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_WEAPON_START_THROW)){
+		if(RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_STD_WEAPON_PUMP) ||
+		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_STD_WEAPON_THROW) ||
+		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_STD_THROW_UNDER) ||
+		   RpAnimBlendClumpGetAssociation(CamTargetEntity->GetClump(), ANIM_STD_START_THROW)){
 			CPed *player = FindPlayerPed();
 			float PlayerDist = (Source - player->GetPosition()).Magnitude();
 			if(PlayerDist < 2.75f)
@@ -3482,7 +3482,7 @@ FindSplinePathPositionFloat(float *out, float *spline, uint32 time, uint32 &mark
 		}
 	}
 	float a = ((float)time - (float)MS(spline[marker-4])) / (float)MS(spline[marker] - spline[marker-4]);
-	a = clamp(a, 0.0f, 1.0f);
+	a = Clamp(a, 0.0f, 1.0f);
 	float b = 1.0f - a;
 	*out =	b*b*b * spline[marker-3] +
 		3.0f*a*b*b * spline[marker-1] +
@@ -3520,7 +3520,7 @@ FindSplinePathPositionVector(CVector *out, float *spline, uint32 time, uint32 &m
 	}
 
 	float a = ((float)time - (float)MS(spline[marker-10])) / (float)MS(spline[marker] - spline[marker-10]);
-	a = clamp(a, 0.0f, 1.0f);
+	a = Clamp(a, 0.0f, 1.0f);
 	float b = 1.0f - a;
 	out->x =
 		b*b*b * spline[marker-9] +
@@ -3829,11 +3829,11 @@ CCam::Process_Debug(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 95.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 95.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -3900,11 +3900,11 @@ CCam::Process_Debug(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 95.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 95.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -3981,11 +3981,11 @@ CCam::Process_Editor(const CVector&, float, float, float)
 	}
 
 	// stay inside sectors
-	while(CWorld::GetSectorX(Source.x) > 95.0f)
+	while(CWorld::GetSectorX(Source.x) > NUMSECTORS_X-5.0f)
 		Source.x -= 1.0f;
 	while(CWorld::GetSectorX(Source.x) < 5.0f)
 		Source.x += 1.0f;
-	while(CWorld::GetSectorY(Source.y) > 95.0f)
+	while(CWorld::GetSectorY(Source.y) > NUMSECTORS_X-5.0f)
 		Source.y -= 1.0f;
 	while(CWorld::GetSectorY(Source.y) < 5.0f)
 		Source.y += 1.0f;
@@ -4631,7 +4631,7 @@ CCam::Process_FollowPed_Rotation(const CVector &CameraTarget, float TargetOrient
 */
 	{
 		LookLeftRight = -CPad::GetPad(0)->LookAroundLeftRight();
-		LookUpDown = -CPad::GetPad(0)->LookAroundUpDown();
+		LookUpDown = CPad::GetPad(0)->LookAroundUpDown();
 	}
 	float AlphaOffset, BetaOffset;
 	if(UseMouse){
@@ -4899,7 +4899,7 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 			// 0.98f: CAR_FOV_FADE_MULT
 			FOV = Pow(0.98f, CTimer::GetTimeStep()) * (FOV - DefaultFOV) + DefaultFOV;
 
-		FOV = clamp(FOV, DefaultFOV, DefaultFOV + 30.0f);
+		FOV = Clamp(FOV, DefaultFOV, DefaultFOV + 30.0f);
 	}
 
 	// WORKAROUND: I still don't know how looking behind works (m_bCamDirectlyInFront is unused in III, they seem to use m_bUseTransitionBeta)
@@ -4933,9 +4933,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 		AlphaSpeed = 0.0;
 		Distance = 1000.0;
 
-		Front.x = -(cos(Beta) * cos(Alpha));
-		Front.y = -(sin(Beta) * cos(Alpha));
-		Front.z = sin(Alpha);
+		Front.x = -(Cos(Beta) * Cos(Alpha));
+		Front.y = -(Sin(Beta) * Cos(Alpha));
+		Front.z = Sin(Alpha);
 
 		m_aTargetHistoryPosOne = TargetCoors - nextDistance * Front;
 
@@ -5021,7 +5021,7 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 					}
 				}
 
-	float targetAlpha = Asin(clamp(Front.z, -1.0f, 1.0f)) - zoomModeAlphaOffset;
+	float targetAlpha = Asin(Clamp(Front.z, -1.0f, 1.0f)) - zoomModeAlphaOffset;
 	if (targetAlpha <= maxAlphaAllowed) {
 		if (targetAlpha < -CARCAM_SET[camSetArrPos][14])
 			targetAlpha = -CARCAM_SET[camSetArrPos][14];
@@ -5039,11 +5039,15 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 
 	// Using GetCarGun(LR/UD) will give us same unprocessed RightStick value as SA
 	float stickX = -(pad->GetCarGunLeftRight());
-	float stickY = pad->GetCarGunUpDown();
+	float stickY = -pad->GetCarGunUpDown();
 
 	// In SA this is for not let num2/num8 move camera when Keyboard & Mouse controls are used.
 	// if (CCamera::m_bUseMouse3rdPerson)
 	//	stickY = 0.0f;
+#ifdef INVERT_LOOK_FOR_PAD
+	if (CPad::bInvertLook4Pad)
+		stickY = -stickY;
+#endif
 
 	float xMovement = Abs(stickX) * (FOV / 80.0f * 5.f / 70.f) * stickX * 0.007f * 0.007f;
 	float yMovement = Abs(stickY) * (FOV / 80.0f * 3.f / 70.f) * stickY * 0.007f * 0.007f;
@@ -5206,9 +5210,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 
 	lastBeta = Beta;
 
-	Front.x = -(cos(Beta) * cos(Alpha));
-	Front.y = -(sin(Beta) * cos(Alpha));
-	Front.z = sin(Alpha);
+	Front.x = -(Cos(Beta) * Cos(Alpha));
+	Front.y = -(Sin(Beta) * Cos(Alpha));
+	Front.z = Sin(Alpha);
 	GetVectorsReadyForRW();
 	TheCamera.m_bCamDirectlyBehind = false;
 	TheCamera.m_bCamDirectlyInFront = false;
@@ -5218,9 +5222,9 @@ CCam::Process_FollowCar_SA(const CVector& CameraTarget, float TargetOrientation,
 	m_cvecTargetCoorsForFudgeInter = TargetCoors;
 	m_aTargetHistoryPosThree = m_aTargetHistoryPosOne;
 	float nextAlpha = alphaWithSpeedAccounted + zoomModeAlphaOffset;
-	float nextFrontX = -(cos(Beta) * cos(nextAlpha));
-	float nextFrontY = -(sin(Beta) * cos(nextAlpha));
-	float nextFrontZ = sin(nextAlpha);
+	float nextFrontX = -(Cos(Beta) * Cos(nextAlpha));
+	float nextFrontY = -(Sin(Beta) * Cos(nextAlpha));
+	float nextFrontZ = Sin(nextAlpha);
 
 	m_aTargetHistoryPosOne.x = TargetCoors.x - nextFrontX * nextDistance;
 	m_aTargetHistoryPosOne.y = TargetCoors.y - nextFrontY * nextDistance;

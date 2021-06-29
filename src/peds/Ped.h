@@ -9,6 +9,7 @@
 #include "Physical.h"
 #include "Weapon.h"
 #include "WeaponInfo.h"
+#include "Collision.h"
 
 #define FEET_OFFSET	1.04f
 #define CHECK_NEARBY_THINGS_MAX_DIST	15.0f
@@ -443,7 +444,7 @@ public:
 	float m_fRotationCur;
 	float m_fRotationDest;
 	float m_headingRate;
-	uint16 m_vehEnterType;
+	uint16 m_vehDoor;
 	int16 m_walkAroundType;
 	CPhysical *m_pCurrentPhysSurface;
 	CVector m_vecOffsetFromPhysSurface;
@@ -493,10 +494,10 @@ public:
 	uint32 m_leaveCarTimer;
 	uint32 m_getUpTimer;
 	uint32 m_lookTimer;
-	uint32 m_standardTimer;
+	uint32 m_chatTimer;
 	uint32 m_attackTimer;
 	uint32 m_shootTimer; // shooting is a part of attack
-	uint32 m_hitRecoverTimer;
+	uint32 m_carJackTimer;
 	uint32 m_objectiveTimer;
 	uint32 m_duckTimer;
 	uint32 m_duckAndCoverTimer;
@@ -514,10 +515,10 @@ public:
 	CVector m_vecSeekPosEx; // used for OBJECTIVE_GUARD_SPOT
 	float m_distanceToCountSeekDoneEx; // used for OBJECTIVE_GUARD_SPOT
 
-	static void *operator new(size_t);
-	static void *operator new(size_t, int);
-	static void operator delete(void*, size_t);
-	static void operator delete(void*, int);
+	static void *operator new(size_t) throw();
+	static void *operator new(size_t, int) throw();
+	static void operator delete(void*, size_t) throw();
+	static void operator delete(void*, int) throw();
 
 	CPed(uint32 pedType);
 	~CPed(void);

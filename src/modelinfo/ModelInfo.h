@@ -10,6 +10,7 @@
 #include "VehicleModelInfo.h"
 #include "XtraCompsModelInfo.h"
 #include "Instance.h"
+#include "Game.h"
 
 class CModelInfo
 {
@@ -41,6 +42,9 @@ public:
 	static CBaseModelInfo *GetModelInfo(const char *name, int *id);
 	static CBaseModelInfo *GetModelInfo(int id){
 		return ms_modelInfoPtrs[id];
+	}
+	static CColModel *GetColModel(int id){
+		return ms_modelInfoPtrs[id]->GetColModel();
 	}
 
 	static bool IsBoatModel(int32 id);

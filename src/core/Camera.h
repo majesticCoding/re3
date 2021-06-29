@@ -639,9 +639,9 @@ public:
 	CVector &GetGameCamPosition(void) { return m_vecGameCamPos; }
 	void CalculateDerivedValues(void);
 	bool IsPointVisible(const CVector &center, const CMatrix *mat);
-	bool IsSphereVisible(const CVector &center, float radius, const CMatrix *mat);
+	bool IsSphereVisible(const CVector &center, float radius, Const CMatrix *mat);
 	bool IsSphereVisible(const CVector &center, float radius);
-	bool IsBoxVisible(RwV3d *box, const CMatrix *mat);
+	bool IsBoxVisible(CVUVECTOR *box, const CMatrix *mat);
 };
 
 VALIDATE_SIZE(CCamera, 0xE9D8);

@@ -18,6 +18,7 @@
 #include "Radar.h"
 #include "Fire.h"
 #include "Darkel.h"
+#include "SaveBuf.h"
 
 bool CVehicle::bWheelsOnlyCheat;
 bool CVehicle::bAllDodosCheat;
@@ -29,10 +30,10 @@ bool CVehicle::bAltDodoCheat;
 #endif
 bool CVehicle::m_bDisableMouseSteering = true;
 
-void *CVehicle::operator new(size_t sz) { return CPools::GetVehiclePool()->New();  }
-void *CVehicle::operator new(size_t sz, int handle) { return CPools::GetVehiclePool()->New(handle); }
-void CVehicle::operator delete(void *p, size_t sz) { CPools::GetVehiclePool()->Delete((CVehicle*)p); }
-void CVehicle::operator delete(void *p, int handle) { CPools::GetVehiclePool()->Delete((CVehicle*)p); }
+void *CVehicle::operator new(size_t sz) throw() { return CPools::GetVehiclePool()->New();  }
+void *CVehicle::operator new(size_t sz, int handle) throw() { return CPools::GetVehiclePool()->New(handle); }
+void CVehicle::operator delete(void *p, size_t sz) throw() { CPools::GetVehiclePool()->Delete((CVehicle*)p); }
+void CVehicle::operator delete(void *p, int handle) throw() { CPools::GetVehiclePool()->Delete((CVehicle*)p); }
 
 #ifdef FIX_BUGS
 // I think they meant that
@@ -108,7 +109,7 @@ CVehicle::CVehicle(uint8 CreatedBy)
 	m_fMapObjectHeightAhead = m_fMapObjectHeightBehind = 0.0f;
 	m_audioEntityId = DMAudio.CreateEntity(AUDIOTYPE_PHYSICAL, this);
 	if(m_audioEntityId >= 0)
-		DMAudio.SetEntityStatus(m_audioEntityId, true);
+		DMAudio.SetEntityStatus(m_audioEntityId, TRUE);
 	m_nRadioStation = CGeneral::GetRandomNumber() % USERTRACK;
 	m_pCurGroundEntity = nil;
 	m_bRainAudioCounter = 0;
@@ -429,8 +430,8 @@ CVehicle::FlyingControl(eFlightModel flightModel)
 		}
 		if (CPad::GetPad(0)->GetHorn()) {
 			fYaw = 0.0f;
-			fPitch = clamp(10.0f * DotProduct(m_vecMoveSpeed, GetForward()), -200.0f, 1.3f);
-			fRoll = clamp(10.0f * DotProduct(m_vecMoveSpeed, GetRight()), -200.0f, 1.3f);
+			fPitch = Clamp(10.0f * DotProduct(m_vecMoveSpeed, GetForward()), -200.0f, 1.3f);
+			fRoll = Clamp(10.0f * DotProduct(m_vecMoveSpeed, GetRight()), -200.0f, 1.3f);
 		}
 		ApplyTurnForce(fPitch * GetUp() * fPitchVar * m_fTurnMass * CTimer::GetTimeStep(), GetForward());
 		ApplyTurnForce(fRoll * GetUp() * fRollVar * m_fTurnMass * CTimer::GetTimeStep(), GetRight());
@@ -794,13 +795,13 @@ CVehicle::ShufflePassengersToMakeSpace(void)
 		if (!pPassengers[2] && !(m_nGettingInFlags & CAR_DOOR_FLAG_RR)) {
 			pPassengers[2] = pPassengers[1];
 			pPassengers[1] = nil;
-			pPassengers[2]->m_vehEnterType = CAR_DOOR_RR;
+			pPassengers[2]->m_vehDoor = CAR_DOOR_RR;
 			return true;
 		}
 		if (!pPassengers[0] && !(m_nGettingInFlags & CAR_DOOR_FLAG_RF)) {
 			pPassengers[0] = pPassengers[1];
 			pPassengers[1] = nil;
-			pPassengers[0]->m_vehEnterType = CAR_DOOR_RF;
+			pPassengers[0]->m_vehDoor = CAR_DOOR_RF;
 			return true;
 		}
 		return false;
@@ -811,13 +812,13 @@ CVehicle::ShufflePassengersToMakeSpace(void)
 		if (!pPassengers[1] && !(m_nGettingInFlags & CAR_DOOR_FLAG_LR)) {
 			pPassengers[1] = pPassengers[2];
 			pPassengers[2] = nil;
-			pPassengers[1]->m_vehEnterType = CAR_DOOR_LR;
+			pPassengers[1]->m_vehDoor = CAR_DOOR_LR;
 			return true;
 		}
 		if (!pPassengers[0] && !(m_nGettingInFlags & CAR_DOOR_FLAG_RF)) {
 			pPassengers[0] = pPassengers[2];
 			pPassengers[2] = nil;
-			pPassengers[0]->m_vehEnterType = CAR_DOOR_RF;
+			pPassengers[0]->m_vehDoor = CAR_DOOR_RF;
 			return true;
 		}
 		return false;
@@ -828,13 +829,13 @@ CVehicle::ShufflePassengersToMakeSpace(void)
 		if (!pPassengers[1] && !(m_nGettingInFlags & CAR_DOOR_FLAG_LR)) {
 			pPassengers[1] = pPassengers[0];
 			pPassengers[0] = nil;
-			pPassengers[1]->m_vehEnterType = CAR_DOOR_LR;
+			pPassengers[1]->m_vehDoor = CAR_DOOR_LR;
 			return true;
 		}
 		if (!pPassengers[2] && !(m_nGettingInFlags & CAR_DOOR_FLAG_RR)) {
 			pPassengers[2] = pPassengers[0];
 			pPassengers[0] = nil;
-			pPassengers[2]->m_vehEnterType = CAR_DOOR_RR;
+			pPassengers[2]->m_vehDoor = CAR_DOOR_RR;
 			return true;
 		}
 		return false;
@@ -1323,43 +1324,44 @@ CVehicle::Load(uint8*& buf)
 {
 	CMatrix tmp;
 	SkipSaveBuf(buf, 4);
-	tmp.GetRight().x = ReadSaveBuf<float>(buf);
-	tmp.GetRight().y = ReadSaveBuf<float>(buf);
-	tmp.GetRight().z = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&tmp.GetRight().x, buf);
+	ReadSaveBuf(&tmp.GetRight().y, buf);
+	ReadSaveBuf(&tmp.GetRight().z, buf);
 	SkipSaveBuf(buf, 4);
-	tmp.GetForward().x = ReadSaveBuf<float>(buf);
-	tmp.GetForward().y = ReadSaveBuf<float>(buf);
-	tmp.GetForward().z = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&tmp.GetForward().x, buf);
+	ReadSaveBuf(&tmp.GetForward().y, buf);
+	ReadSaveBuf(&tmp.GetForward().z, buf);
 	SkipSaveBuf(buf, 4);
-	tmp.GetUp().x = ReadSaveBuf<float>(buf);
-	tmp.GetUp().y = ReadSaveBuf<float>(buf);
-	tmp.GetUp().z = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&tmp.GetUp().x, buf);
+	ReadSaveBuf(&tmp.GetUp().y, buf);
+	ReadSaveBuf(&tmp.GetUp().z, buf);
 	SkipSaveBuf(buf, 4);
-	tmp.GetPosition().x = ReadSaveBuf<float>(buf);
-	tmp.GetPosition().y = ReadSaveBuf<float>(buf);
-	tmp.GetPosition().z = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&tmp.GetPosition().x, buf);
+	ReadSaveBuf(&tmp.GetPosition().y, buf);
+	ReadSaveBuf(&tmp.GetPosition().z, buf);
 	m_matrix = tmp;
 	SkipSaveBuf(buf, 16);
 	LoadEntityFlags(buf);
 	SkipSaveBuf(buf, 212);
 	AutoPilot.Load(buf);
-	m_currentColour1 = ReadSaveBuf<int8>(buf);
-	m_currentColour2 = ReadSaveBuf<int8>(buf);
+	ReadSaveBuf(&m_currentColour1, buf);
+	ReadSaveBuf(&m_currentColour2, buf);
 	SkipSaveBuf(buf, 2);
-	m_nAlarmState = ReadSaveBuf<int16>(buf);
+	ReadSaveBuf(&m_nAlarmState, buf);
 	SkipSaveBuf(buf, 43);
-	m_nNumMaxPassengers = ReadSaveBuf<int8>(buf);
+	ReadSaveBuf(&m_nNumMaxPassengers, buf);
 	SkipSaveBuf(buf, 2);
-	field_1D0[0] = ReadSaveBuf<float>(buf);
-	field_1D0[1] = ReadSaveBuf<float>(buf);
-	field_1D0[2] = ReadSaveBuf<float>(buf);
-	field_1D0[3] = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&field_1D0[0], buf);
+	ReadSaveBuf(&field_1D0[1], buf);
+	ReadSaveBuf(&field_1D0[2], buf);
+	ReadSaveBuf(&field_1D0[3], buf);
 	SkipSaveBuf(buf, 8);
-	m_fSteerAngle = ReadSaveBuf<float>(buf);
-	m_fGasPedal = ReadSaveBuf<float>(buf);
-	m_fBrakePedal = ReadSaveBuf<float>(buf);
-	VehicleCreatedBy = ReadSaveBuf<uint8>(buf);
-	uint8 flags = ReadSaveBuf<uint8>(buf);
+	ReadSaveBuf(&m_fSteerAngle, buf);
+	ReadSaveBuf(&m_fGasPedal, buf);
+	ReadSaveBuf(&m_fBrakePedal, buf);
+	ReadSaveBuf(&VehicleCreatedBy, buf);
+	uint8 flags;
+	ReadSaveBuf(&flags, buf);
 	bIsLawEnforcer = !!(flags & BIT(0));
 	bIsLocked = !!(flags & BIT(3));
 	bEngineOn = !!(flags & BIT(4));
@@ -1367,16 +1369,17 @@ CVehicle::Load(uint8*& buf)
 	bLightsOn = !!(flags & BIT(6));
 	bFreebies = !!(flags & BIT(7));
 	SkipSaveBuf(buf, 10);
-	m_fHealth = ReadSaveBuf<float>(buf);
-	m_nCurrentGear = ReadSaveBuf<uint8>(buf);
+	ReadSaveBuf(&m_fHealth, buf);
+	ReadSaveBuf(&m_nCurrentGear, buf);
 	SkipSaveBuf(buf, 3);
-	m_fChangeGearTime = ReadSaveBuf<float>(buf);
+	ReadSaveBuf(&m_fChangeGearTime, buf);
 	SkipSaveBuf(buf, 4);
-	m_nTimeOfDeath = ReadSaveBuf<uint32>(buf);
+	ReadSaveBuf(&m_nTimeOfDeath, buf);
 	SkipSaveBuf(buf, 2);
-	m_nBombTimer = ReadSaveBuf<int16>(buf);
+	ReadSaveBuf(&m_nBombTimer, buf);
 	SkipSaveBuf(buf, 12);
-	m_nDoorLock = (eCarLock)ReadSaveBuf<int8>(buf);
+	ReadSaveBuf(&flags, buf);
+	m_nDoorLock = (eCarLock)flags;
 	SkipSaveBuf(buf, 99);
 }
 #endif

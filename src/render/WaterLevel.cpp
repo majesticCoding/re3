@@ -126,10 +126,10 @@ CWaterLevel::Initialise(Const char *pWaterDat)
 #ifdef FIX_BUGS
 			// water.dat has rects that go out of bounds
 			// which causes memory corruption
-			l = clamp(l, 0, MAX_SMALL_SECTORS - 1);
-			r = clamp(r, 0, MAX_SMALL_SECTORS - 1);
-			t = clamp(t, 0, MAX_SMALL_SECTORS - 1);
-			b = clamp(b, 0, MAX_SMALL_SECTORS - 1);
+			l = Clamp(l, 0, MAX_SMALL_SECTORS - 1);
+			r = Clamp(r, 0, MAX_SMALL_SECTORS - 1);
+			t = Clamp(t, 0, MAX_SMALL_SECTORS - 1);
+			b = Clamp(b, 0, MAX_SMALL_SECTORS - 1);
 #endif
 
 			for (int32 x = l; x <= r; x++)
@@ -432,14 +432,14 @@ CWaterLevel::TestVisibilityForFineWaterBlocks(const CVector &worldPos)
 
 		if ((lineEnd.x > WORLD_MIN_X && lineEnd.x < WORLD_MAX_X) && (lineEnd.y > WORLD_MIN_Y && lineEnd.y < WORLD_MAX_Y))
 		{
-			if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false, nil))
+			if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false))
 			{
 				lineStart.x += 0.4f;
 				lineStart.y += 0.4f;
 				lineEnd.x += 0.4f;
 				lineEnd.y += 0.4f;
 
-				if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false, nil))
+				if (!CWorld::ProcessLineOfSight(lineStart, lineEnd, col, entity, true, false, false, false, true, false))
 				{
 					return false;
 				}
@@ -643,6 +643,7 @@ CWaterLevel::RenderWater()
 	if (gbDontRenderWater)
 		return;
 #endif
+	PUSH_RENDERGROUP("CWaterLevel::RenderWater");
 	bool bUseCamEndX   = false;
 	bool bUseCamStartY = false;
 	
@@ -712,10 +713,10 @@ CWaterLevel::RenderWater()
 	if ( bUseCamEndY )                             
 		nEndY   = WATER_TO_HUGE_SECTOR_Y(camPos.y);
 
-	nStartX = clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
-	nEndX   = clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
-	nStartY = clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
-	nEndY   = clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
+	nStartX = Clamp(nStartX, 0, MAX_HUGE_SECTORS - 1);
+	nEndX   = Clamp(nEndX,   0, MAX_HUGE_SECTORS - 1);
+	nStartY = Clamp(nStartY, 0, MAX_HUGE_SECTORS - 1);
+	nEndY   = Clamp(nEndY,   0, MAX_HUGE_SECTORS - 1);
 	
 	for ( int32 x = nStartX; x <= nEndX; x++ )
 	{
@@ -739,8 +740,7 @@ CWaterLevel::RenderWater()
 
 				if ( fHugeSectorMaxRenderDistSqr > fHugeSectorDistToCamSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE),
-							&TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecHugeSectorCentre.x, vecHugeSectorCentre.y, 0.0f), SectorRadius(HUGE_SECTOR_SIZE)) )
 					{
 						if ( fHugeSectorDistToCamSqr >= SQR(500.0f) /*fHugeSectorNearDist*/ )
 						{
@@ -781,8 +781,7 @@ CWaterLevel::RenderWater()
 										
 										if ( fLargeSectorDistToCamSqr < fHugeSectorMaxRenderDistSqr )
 										{
-											if ( TheCamera.IsSphereVisible(CVector(vecLargeSectorCentre.x, vecLargeSectorCentre.y, 0.0f), SectorRadius(LARGE_SECTOR_SIZE), //90.879997f,
-												&TheCamera.GetCameraMatrix()) )
+											if ( TheCamera.IsSphereVisible(CVector(vecLargeSectorCentre.x, vecLargeSectorCentre.y, 0.0f), SectorRadius(LARGE_SECTOR_SIZE)) ) //90.879997f,
 											{
 												// Render four small(32x32) sectors, or one large(64x64).
 
@@ -944,8 +943,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE),
-							&TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -978,8 +976,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE),
-							&TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1002,8 +999,7 @@ CWaterLevel::RenderWater()
 				
 				if ( fCamDistToSector < fHugeSectorMaxRenderDistSqr )
 				{
-					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE),
-							&TheCamera.GetCameraMatrix()) )
+					if ( TheCamera.IsSphereVisible(CVector(vecExtraHugeSectorCentre.x, vecExtraHugeSectorCentre.y, 0.0f), SectorRadius(EXTRAHUGE_SECTOR_SIZE)) )
 					{
 						RenderOneFlatExtraHugeWaterPoly(
 							vecExtraHugeSectorCentre.x - EXTRAHUGE_SECTOR_SIZE/2,
@@ -1066,6 +1062,8 @@ CWaterLevel::RenderWater()
 	}
 	
 	DefinedState();
+
+	POP_RENDERGROUP();
 }
 
 void
@@ -1408,10 +1406,10 @@ CWaterLevel::CalcDistanceToWater(float fX, float fY)
 	int32 nStartY = WATER_TO_SMALL_SECTOR_Y(fY - fSectorMaxRenderDist) - 1;
 	int32 nEndY   = WATER_TO_SMALL_SECTOR_Y(fY + fSectorMaxRenderDist) + 1;
 	
-	nStartX = clamp(nStartX, 0, MAX_SMALL_SECTORS - 1);
-	nEndX   = clamp(nEndX,   0, MAX_SMALL_SECTORS - 1);
-	nStartY = clamp(nStartY, 0, MAX_SMALL_SECTORS - 1);
-	nEndY   = clamp(nEndY,   0, MAX_SMALL_SECTORS - 1);
+	nStartX = Clamp(nStartX, 0, MAX_SMALL_SECTORS - 1);
+	nEndX   = Clamp(nEndX,   0, MAX_SMALL_SECTORS - 1);
+	nStartY = Clamp(nStartY, 0, MAX_SMALL_SECTORS - 1);
+	nEndY   = Clamp(nEndY,   0, MAX_SMALL_SECTORS - 1);
 	
 	float fDistSqr = 1.0e10f;
 	
@@ -1435,7 +1433,7 @@ CWaterLevel::CalcDistanceToWater(float fX, float fY)
 		}
 	}
 
-	return clamp(Sqrt(fDistSqr) - 23.0f, 0.0f, fSectorMaxRenderDist);
+	return Clamp(Sqrt(fDistSqr) - 23.0f, 0.0f, fSectorMaxRenderDist);
 }
 
 void

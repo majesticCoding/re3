@@ -192,6 +192,10 @@ CVisibilityPlugins::InitAlphaEntityList(void)
 bool
 CVisibilityPlugins::InsertEntityIntoSortedList(CEntity *e, float dist)
 {
+#ifdef FIX_BUGS
+	if (!e->m_rwObject) return true;
+#endif
+
 	AlphaObjectInfo item;
 	item.entity = e;
 	item.sort = dist;
@@ -289,6 +293,7 @@ CVisibilityPlugins::RenderFadingEntities(void)
 			continue;
 #endif
 		mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(e->GetModelIndex());
+
 #ifdef FIX_BUGS
 		if(mi->GetModelType() == MITYPE_SIMPLE && mi->m_noZwrite)
 #else
@@ -298,13 +303,17 @@ CVisibilityPlugins::RenderFadingEntities(void)
 #ifdef EXTRA_MODEL_FLAGS
 		else if(mi->m_bIsTree)
 			SetAlphaRef(128);
+		if(!e->IsBuilding() || mi->RenderDoubleSided())
+			BACKFACE_CULLING_OFF;
 #endif
 
 		if(e->bDistanceFade){
 			DeActivateDirectional();
 			SetAmbientColours();
 			e->bImBeingRendered = true;
+			PUSH_RENDERGROUP(mi->GetModelName());
 			RenderFadingAtomic((RpAtomic*)e->m_rwObject, node->item.sort);
+			POP_RENDERGROUP();
 			e->bImBeingRendered = false;
 		}else
 			CRenderer::RenderOneNonRoad(e);
@@ -312,6 +321,7 @@ CVisibilityPlugins::RenderFadingEntities(void)
 #ifdef EXTRA_MODEL_FLAGS
 		if(mi->m_bIsTree)
 			SetAlphaRef(2);
+		BACKFACE_CULLING_ON;
 #endif
 #ifdef FIX_BUGS
 		if(mi->GetModelType() == MITYPE_SIMPLE && mi->m_noZwrite)

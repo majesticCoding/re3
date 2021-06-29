@@ -305,7 +305,7 @@ void CReplay::RecordThisFrame(void)
 #endif
 	tGeneralPacket* general = (tGeneralPacket*)&Record.m_pBase[Record.m_nOffset];
 	general->type = REPLAYPACKET_GENERAL;
-	general->camera_pos.CopyOnlyMatrix(&TheCamera.GetMatrix());
+	general->camera_pos.CopyOnlyMatrix(TheCamera.GetMatrix());
 	general->player_pos = FindPlayerCoors();
 	general->in_rcvehicle = CWorld::Players[CWorld::PlayerInFocus].m_pRemoteVehicle ? true : false;
 	Record.m_nOffset += sizeof(*general);
@@ -404,8 +404,8 @@ void CReplay::StorePedAnimation(CPed *ped, CStoredAnimationState *state)
 	CAnimBlendAssociation* main = RpAnimBlendClumpGetMainAssociation((RpClump*)ped->m_rwObject, &second, &blend_amount);
 	if (main){
 		state->animId = main->animId;
-		state->time = 255.0f / 4.0f * clamp(main->currentTime, 0.0f, 4.0f);
-		state->speed = 255.0f / 3.0f * clamp(main->speed, 0.0f, 3.0f);
+		state->time = 255.0f / 4.0f * Clamp(main->currentTime, 0.0f, 4.0f);
+		state->speed = 255.0f / 3.0f * Clamp(main->speed, 0.0f, 3.0f);
 	}else{
 		state->animId = 3;
 		state->time = 0;
@@ -413,9 +413,9 @@ void CReplay::StorePedAnimation(CPed *ped, CStoredAnimationState *state)
 	}
 	if (second) {
 		state->secAnimId = second->animId;
-		state->secTime = 255.0f / 4.0f * clamp(second->currentTime, 0.0f, 4.0f);
-		state->secSpeed = 255.0f / 3.0f * clamp(second->speed, 0.0f, 3.0f);
-		state->blendAmount = 255.0f / 2.0f * clamp(blend_amount, 0.0f, 2.0f);
+		state->secTime = 255.0f / 4.0f * Clamp(second->currentTime, 0.0f, 4.0f);
+		state->secSpeed = 255.0f / 3.0f * Clamp(second->speed, 0.0f, 3.0f);
+		state->blendAmount = 255.0f / 2.0f * Clamp(blend_amount, 0.0f, 2.0f);
 	}else{
 		state->secAnimId = 0;
 		state->secTime = 0;
@@ -425,9 +425,9 @@ void CReplay::StorePedAnimation(CPed *ped, CStoredAnimationState *state)
 	CAnimBlendAssociation* partial = RpAnimBlendClumpGetMainPartialAssociation((RpClump*)ped->m_rwObject);
 	if (partial) {
 		state->partAnimId = partial->animId;
-		state->partAnimTime = 255.0f / 4.0f * clamp(partial->currentTime, 0.0f, 4.0f);
-		state->partAnimSpeed = 255.0f / 3.0f * clamp(partial->speed, 0.0f, 3.0f);
-		state->partBlendAmount = 255.0f / 2.0f * clamp(partial->blendAmount, 0.0f, 2.0f);
+		state->partAnimTime = 255.0f / 4.0f * Clamp(partial->currentTime, 0.0f, 4.0f);
+		state->partAnimSpeed = 255.0f / 3.0f * Clamp(partial->speed, 0.0f, 3.0f);
+		state->partBlendAmount = 255.0f / 2.0f * Clamp(partial->blendAmount, 0.0f, 2.0f);
 	}else{
 		state->partAnimId = 0;
 		state->partAnimTime = 0;
@@ -442,11 +442,11 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 		CAnimBlendAssociation* assoc = RpAnimBlendClumpGetMainAssociation_N((RpClump*)ped->m_rwObject, i);
 		if (assoc){
 			state->aAnimId[i] = assoc->animId;
-			state->aCurTime[i] = 255.0f / 4.0f * clamp(assoc->currentTime, 0.0f, 4.0f);
-			state->aSpeed[i] = 255.0f / 3.0f * clamp(assoc->speed, 0.0f, 3.0f);
-			state->aBlendAmount[i] = 255.0f / 2.0f * clamp(assoc->blendAmount, 0.0f, 2.0f);
+			state->aCurTime[i] = 255.0f / 4.0f * Clamp(assoc->currentTime, 0.0f, 4.0f);
+			state->aSpeed[i] = 255.0f / 3.0f * Clamp(assoc->speed, 0.0f, 3.0f);
+			state->aBlendAmount[i] = 255.0f / 2.0f * Clamp(assoc->blendAmount, 0.0f, 2.0f);
 #ifdef FIX_REPLAY_BUGS
-			state->aBlendDelta[i] = 127.0f / 32.0f * clamp(assoc->blendDelta, -16.0f, 16.0f);
+			state->aBlendDelta[i] = 127.0f / 32.0f * Clamp(assoc->blendDelta, -16.0f, 16.0f);
 #endif
 			state->aFlags[i] = assoc->flags;
 			if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH || assoc->callbackType == CAnimBlendAssociation::CB_DELETE) {
@@ -457,7 +457,7 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 				state->aFunctionCallbackID[i] = 0;
 			}
 		}else{
-			state->aAnimId[i] = NUM_ANIMS;
+			state->aAnimId[i] = ANIM_STD_NUM;
 			state->aCurTime[i] = 0;
 			state->aSpeed[i] = 85;
 			state->aFunctionCallbackID[i] = 0;
@@ -468,11 +468,11 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 		CAnimBlendAssociation* assoc = RpAnimBlendClumpGetMainPartialAssociation_N((RpClump*)ped->m_rwObject, i);
 		if (assoc) {
 			state->aAnimId2[i] = assoc->animId;
-			state->aCurTime2[i] = 255.0f / 4.0f * clamp(assoc->currentTime, 0.0f, 4.0f);
-			state->aSpeed2[i] = 255.0f / 3.0f * clamp(assoc->speed, 0.0f, 3.0f);
-			state->aBlendAmount2[i] = 255.0f / 2.0f * clamp(assoc->blendAmount, 0.0f, 2.0f);
+			state->aCurTime2[i] = 255.0f / 4.0f * Clamp(assoc->currentTime, 0.0f, 4.0f);
+			state->aSpeed2[i] = 255.0f / 3.0f * Clamp(assoc->speed, 0.0f, 3.0f);
+			state->aBlendAmount2[i] = 255.0f / 2.0f * Clamp(assoc->blendAmount, 0.0f, 2.0f);
 #ifdef FIX_REPLAY_BUGS
-			state->aBlendDelta2[i] = 127.0f / 16.0f * clamp(assoc->blendDelta, -16.0f, 16.0f);
+			state->aBlendDelta2[i] = 127.0f / 16.0f * Clamp(assoc->blendDelta, -16.0f, 16.0f);
 #endif
 			state->aFlags2[i] = assoc->flags;
 			if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH || assoc->callbackType == CAnimBlendAssociation::CB_DELETE) {
@@ -484,7 +484,7 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 			}
 		}
 		else {
-			state->aAnimId2[i] = NUM_ANIMS;
+			state->aAnimId2[i] = ANIM_STD_NUM;
 			state->aCurTime2[i] = 0;
 			state->aSpeed2[i] = 85;
 			state->aFunctionCallbackID2[i] = 0;
@@ -558,7 +558,7 @@ void CReplay::RetrievePedAnimation(CPed *ped, CStoredAnimationState *state)
 		float time = state->partAnimTime * 4.0f / 255.0f;
 		float speed = state->partAnimSpeed * 3.0f / 255.0f;
 		float blend = state->partBlendAmount * 2.0f / 255.0f;
-		if (blend > 0.0f && state->partAnimId != ANIM_IDLE_STANCE){
+		if (blend > 0.0f && state->partAnimId != ANIM_STD_IDLE){
 			CAnimBlendAssociation* anim3 = CAnimManager::BlendAnimation(
 				(RpClump*)ped->m_rwObject, ASSOCGRP_STD, (AnimationId)state->partAnimId, 1000.0f);
 			anim3->SetCurrentTime(time);
@@ -578,7 +578,7 @@ void CReplay::RetrieveDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationSt
 		assoc->SetBlend(0.0f, -1.0f);
 #endif
 	for (int i = 0; i < NUM_MAIN_ANIMS_IN_REPLAY; i++) {
-		if (state->aAnimId[i] == NUM_ANIMS)
+		if (state->aAnimId[i] == ANIM_STD_NUM)
 			continue;
 #ifdef FIX_REPLAY_BUGS
 		CAnimBlendAssociation* anim = CAnimManager::AddAnimation(ped->GetClump(),
@@ -607,7 +607,7 @@ void CReplay::RetrieveDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationSt
 			anim->SetDeleteCallback(FindCBFunction(callback & 0x7F), ped);
 	}
 	for (int i = 0; i < NUM_PARTIAL_ANIMS_IN_REPLAY; i++) {
-		if (state->aAnimId2[i] == NUM_ANIMS)
+		if (state->aAnimId2[i] == ANIM_STD_NUM)
 			continue;
 #ifdef FIX_REPLAY_BUGS
 		CAnimBlendAssociation* anim = CAnimManager::AddAnimation(ped->GetClump(),
@@ -1232,7 +1232,7 @@ void CReplay::RestoreStuffFromMem(void)
 		ped->SetModelIndex(mi);
 		ped->m_pVehicleAnim = nil;
 		ped->m_audioEntityId = DMAudio.CreateEntity(AUDIOTYPE_PHYSICAL, ped);
-		DMAudio.SetEntityStatus(ped->m_audioEntityId, true);
+		DMAudio.SetEntityStatus(ped->m_audioEntityId, TRUE);
 		CPopulation::UpdatePedCount((ePedType)ped->m_nPedType, false);
 		if (ped->m_wepModelID >= 0)
 			ped->AddWeaponModel(ped->m_wepModelID);
@@ -1270,7 +1270,7 @@ void CReplay::RestoreStuffFromMem(void)
 			car->SetDoorDamage(CAR_DOOR_RR, DOOR_REAR_RIGHT, true);
 		}
 		vehicle->m_audioEntityId = DMAudio.CreateEntity(AUDIOTYPE_PHYSICAL, vehicle);
-		DMAudio.SetEntityStatus(vehicle->m_audioEntityId, true);
+		DMAudio.SetEntityStatus(vehicle->m_audioEntityId, TRUE);
 		CCarCtrl::UpdateCarCount(vehicle, false);
 		if ((mi == MI_AIRTRAIN || mi == MI_DEADDODO) && vehicle->m_rwObject){
 			CVehicleModelInfo* info = (CVehicleModelInfo*)CModelInfo::GetModelInfo(mi);
@@ -1457,7 +1457,7 @@ void CReplay::SaveReplayToHD(void)
 	CFileMgr::SetDir("");
 }
 
-void PlayReplayFromHD(void)
+void CReplay::PlayReplayFromHD(void)
 {
 	CFileMgr::SetDirMyDocuments();
 	int fr = CFileMgr::OpenFile("replay.rep", "rb");
@@ -1476,17 +1476,17 @@ void PlayReplayFromHD(void)
 		return;
 	}
 	int slot;
-	for (slot = 0; CFileMgr::Read(fr, (char*)CReplay::Buffers[slot], sizeof(CReplay::Buffers[slot])); slot++)
-		CReplay::BufferStatus[slot] = CReplay::REPLAYBUFFER_PLAYBACK;
-	CReplay::BufferStatus[slot - 1] = CReplay::REPLAYBUFFER_RECORD;
-	while (slot < CReplay::NUM_REPLAYBUFFERS)
-		CReplay::BufferStatus[slot++] = CReplay::REPLAYBUFFER_UNUSED;
+	for (slot = 0; CFileMgr::Read(fr, (char*)Buffers[slot], sizeof(Buffers[slot])); slot++)
+		BufferStatus[slot] = REPLAYBUFFER_PLAYBACK;
+	BufferStatus[slot - 1] = REPLAYBUFFER_RECORD;
+	while (slot < NUM_REPLAYBUFFERS)
+		BufferStatus[slot++] = REPLAYBUFFER_UNUSED;
 	CFileMgr::CloseFile(fr);
 	CFileMgr::SetDir("");
-	CReplay::TriggerPlayback(CReplay::REPLAYCAMMODE_ASSTORED, 0.0f, 0.0f, 0.0f, false);
-	CReplay::bPlayingBackFromFile = true;
-	CReplay::bAllowLookAroundCam = true;
-	CReplay::StreamAllNecessaryCarsAndPeds();
+	TriggerPlayback(REPLAYCAMMODE_ASSTORED, 0.0f, 0.0f, 0.0f, false);
+	bPlayingBackFromFile = true;
+	bAllowLookAroundCam = true;
+	StreamAllNecessaryCarsAndPeds();
 }
 
 void CReplay::StreamAllNecessaryCarsAndPeds(void)

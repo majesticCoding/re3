@@ -22,6 +22,7 @@
 #include "MemoryHeap.h"
 #include "Bones.h"
 #include "Debug.h"
+#include "SaveBuf.h"
 
 int gBuildings;
 
@@ -110,9 +111,9 @@ CEntity::CreateRwObject(void)
 		if(IsBuilding())
 			gBuildings++;
 		if(RwObjectGetType(m_rwObject) == rpATOMIC)
-			m_matrix.AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)), false);
+			GetMatrix().AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic *)m_rwObject)), false);
 		else if(RwObjectGetType(m_rwObject) == rpCLUMP)
-			m_matrix.AttachRW(RwFrameGetMatrix(RpClumpGetFrame((RpClump*)m_rwObject)), false);
+			GetMatrix().AttachRW(RwFrameGetMatrix(RpClumpGetFrame((RpClump *)m_rwObject)), false);
 		mi->AddRef();
 	}
 }
@@ -123,9 +124,9 @@ CEntity::AttachToRwObject(RwObject *obj)
 	m_rwObject = obj;
 	if(m_rwObject){
 		if(RwObjectGetType(m_rwObject) == rpATOMIC)
-			m_matrix.Attach(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)), false);
+			GetMatrix().Attach(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic *)m_rwObject)), false);
 		else if(RwObjectGetType(m_rwObject) == rpCLUMP)
-			m_matrix.Attach(RwFrameGetMatrix(RpClumpGetFrame((RpClump*)m_rwObject)), false);
+			GetMatrix().Attach(RwFrameGetMatrix(RpClumpGetFrame((RpClump *)m_rwObject)), false);
 		CModelInfo::GetModelInfo(m_modelIndex)->AddRef();
 	}
 }
@@ -136,9 +137,10 @@ CEntity::DetachFromRwObject(void)
 	if(m_rwObject)
 		CModelInfo::GetModelInfo(m_modelIndex)->RemoveRef();
 	m_rwObject = nil;
-	m_matrix.Detach();
+	GetMatrix().Detach();
 }
 
+#ifdef PED_SKIN
 RpAtomic*
 AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 {
@@ -158,13 +160,14 @@ AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 	}
 	return atomic;
 }
+#endif
 
 void
 CEntity::DeleteRwObject(void)
 {
 	RwFrame *f;
 
-	m_matrix.Detach();
+	GetMatrix().Detach();
 	if(m_rwObject){
 		if(RwObjectGetType(m_rwObject) == rpATOMIC){
 			f = RpAtomicGetFrame((RpAtomic*)m_rwObject);
@@ -189,18 +192,18 @@ CEntity::GetBoundRect(void)
 {
 	CRect rect;
 	CVector v;
-	CColModel *col = CModelInfo::GetModelInfo(m_modelIndex)->GetColModel();
+	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 
-	rect.ContainPoint(m_matrix * col->boundingBox.min);
-	rect.ContainPoint(m_matrix * col->boundingBox.max);
+	rect.ContainPoint(GetMatrix() * col->boundingBox.min);
+	rect.ContainPoint(GetMatrix() * col->boundingBox.max);
 
 	v = col->boundingBox.min;
 	v.x = col->boundingBox.max.x;
-	rect.ContainPoint(m_matrix * v);
+	rect.ContainPoint(GetMatrix() * v);
 
 	v = col->boundingBox.max;
 	v.x = col->boundingBox.min.x;
-	rect.ContainPoint(m_matrix * v);
+	rect.ContainPoint(GetMatrix() * v);
 
 	return rect;
 }
@@ -208,21 +211,27 @@ CEntity::GetBoundRect(void)
 CVector
 CEntity::GetBoundCentre(void)
 {
-	CVector v;
-	GetBoundCentre(v);
-	return v;
+	return GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
 }
 
+#ifdef GTA_PS2
+void
+CEntity::GetBoundCentre(CVuVector &out)
+{
+	TransformPoint(out, GetMatrix(), CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center);
+}
+#else
 void
 CEntity::GetBoundCentre(CVector &out)
 {
-	out = m_matrix * CModelInfo::GetModelInfo(m_modelIndex)->GetColModel()->boundingSphere.center;
+	out = GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
 }
+#endif
 
 float
 CEntity::GetBoundRadius(void)
 {
-	return CModelInfo::GetModelInfo(m_modelIndex)->GetColModel()->boundingSphere.radius;
+	return CModelInfo::GetColModel(m_modelIndex)->boundingSphere.radius;
 }
 
 void
@@ -377,10 +386,13 @@ CEntity::Render(void)
 	}
 }
 
+
 bool
-CEntity::GetIsTouching(CVector const &center, float radius)
+CEntity::GetIsTouching(CVUVECTOR const &center, float radius)
 {
-	return sq(GetBoundRadius()+radius) > (GetBoundCentre()-center).MagnitudeSqr();
+	CVUVECTOR boundCenter;
+	GetBoundCentre(boundCenter);
+	return sq(GetBoundRadius()+radius) > (boundCenter-center).MagnitudeSqr();
 }
 
 bool
@@ -398,20 +410,23 @@ CEntity::IsVisibleComplex(void)
 bool
 CEntity::GetIsOnScreen(void)
 {
-	return TheCamera.IsSphereVisible(GetBoundCentre(), GetBoundRadius(),
-		&TheCamera.GetCameraMatrix());
+	return TheCamera.IsSphereVisible(GetBoundCentre(), GetBoundRadius());
 }
 
 bool
 CEntity::GetIsOnScreenComplex(void)
 {
-	RwV3d boundBox[8];
+#ifdef GTA_PS2
+	CVuVector boundBox[8];
+#else
+	CVector boundBox[8];
+#endif
 
 	if(TheCamera.IsPointVisible(GetBoundCentre(), &TheCamera.GetCameraMatrix()))
 		return true;
 
 	CRect rect = GetBoundRect();
-	CColModel *colmodel = CModelInfo::GetModelInfo(m_modelIndex)->GetColModel();
+	CColModel *colmodel = CModelInfo::GetColModel(m_modelIndex);
 	float z = GetPosition().z;
 	float minz = z + colmodel->boundingBox.min.z;
 	float maxz = z + colmodel->boundingBox.max.z;
@@ -566,7 +581,7 @@ CEntity::Remove(void)
 float
 CEntity::GetDistanceFromCentreOfMassToBaseOfModel(void)
 {
-	return -CModelInfo::GetModelInfo(m_modelIndex)->GetColModel()->boundingBox.min.z;
+	return -CModelInfo::GetColModel(m_modelIndex)->boundingBox.min.z;
 }
 
 void
@@ -582,7 +597,7 @@ CEntity::SetupBigBuilding(void)
 	if(m_level == LEVEL_GENERIC){
 		if(mi->GetTxdSlot() != CTxdStore::FindTxdSlot("generic")){
 			mi->SetTexDictionary("generic");
-			printf("%d:%s txd has been set to generic\n", m_modelIndex, mi->GetName());
+			printf("%d:%s txd has been set to generic\n", m_modelIndex, mi->GetModelName());
 		}
 	}
 	if(mi->m_lodDistances[0] > 2000.0f)
@@ -739,7 +754,8 @@ CEntity::SaveEntityFlags(uint8*& buf)
 void
 CEntity::LoadEntityFlags(uint8*& buf)
 {
-	uint32 tmp = ReadSaveBuf<uint32>(buf);
+	uint32 tmp;
+	ReadSaveBuf(&tmp, buf);
 	m_type = (tmp & ((BIT(3) - 1)));
 	m_status = ((tmp >> 3) & (BIT(5) - 1));
 
@@ -770,7 +786,7 @@ CEntity::LoadEntityFlags(uint8*& buf)
 	bZoneCulled = !!(tmp & BIT(30));
 	bZoneCulled2 = !!(tmp & BIT(31));
 
-	tmp = ReadSaveBuf<uint32>(buf);
+	ReadSaveBuf(&tmp, buf);
 
 	bRemoveFromWorld = !!(tmp & BIT(0));
 	bHasHitWall = !!(tmp & BIT(1));

@@ -1,4 +1,4 @@
-#define WITH_D3D
+#define WITHD3D
 #include "common.h"
 
 #include "main.h"
@@ -75,20 +75,14 @@ int32 CRenderer::ms_nNoOfVisibleVehicles;
 CEntity *CRenderer::ms_aVisibleVehiclePtrs[NUMVISIBLEENTITIES];
 int32 CRenderer::ms_nNoOfVisibleBuildings;
 CEntity *CRenderer::ms_aVisibleBuildingPtrs[NUMVISIBLEENTITIES];
+
+CLinkList<EntityInfo> gSortedBuildings;
 #endif
 
 CVector CRenderer::ms_vecCameraPosition;
 CVehicle *CRenderer::m_pFirstPersonVehicle;
 bool CRenderer::m_loadingPriority;
 float CRenderer::ms_lodDistScale = 1.2f;
-
-#ifdef EXTRA_MODEL_FLAGS
-#define BACKFACE_CULLING_ON SetCullMode(rwCULLMODECULLBACK)
-#define BACKFACE_CULLING_OFF SetCullMode(rwCULLMODECULLNONE)
-#else
-#define BACKFACE_CULLING_ON
-#define BACKFACE_CULLING_OFF
-#endif
 
 // unused
 BlockedRange CRenderer::aBlockedRanges[16];
@@ -100,12 +94,18 @@ CRenderer::Init(void)
 {
 	gSortedVehiclesAndPeds.Init(40);
 	SortBIGBuildings();
+#ifdef NEW_RENDERER
+	gSortedBuildings.Init(NUMVISIBLEENTITIES);
+#endif
 }
 
 void
 CRenderer::Shutdown(void)
 {
 	gSortedVehiclesAndPeds.Shutdown();
+#ifdef NEW_RENDERER
+	gSortedBuildings.Shutdown();
+#endif
 }
 
 void
@@ -122,8 +122,12 @@ CRenderer::PreRender(void)
 		for(i = 0; i < ms_nNoOfVisibleVehicles; i++)
 			ms_aVisibleVehiclePtrs[i]->PreRender();
 		// How is this done with cWorldStream?
-		for(i = 0; i < ms_nNoOfVisibleBuildings; i++)
-			ms_aVisibleBuildingPtrs[i]->PreRender();
+		//for(i = 0; i < ms_nNoOfVisibleBuildings; i++)
+		//	ms_aVisibleBuildingPtrs[i]->PreRender();
+		for(CLink<EntityInfo> *node = gSortedBuildings.head.next;
+		    node != &gSortedBuildings.tail;
+		    node = node->next)
+			((CEntity*)node->item.ent)->PreRender();
 		for(node = CVisibilityPlugins::m_alphaBuildingList.head.next;
 		    node != &CVisibilityPlugins::m_alphaBuildingList.tail;
 		    node = node->next)
@@ -158,6 +162,8 @@ CRenderer::RenderOneRoad(CEntity *e)
 #ifdef EXTENDED_PIPELINES
 		CustomPipes::AttachGlossPipe(e->GetAtomic());
 #endif
+		PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+
 #ifdef EXTRA_MODEL_FLAGS
 	if(!e->IsBuilding() || CModelInfo::GetModelInfo(e->GetModelIndex())->RenderDoubleSided()){
 		BACKFACE_CULLING_OFF;
@@ -166,6 +172,8 @@ CRenderer::RenderOneRoad(CEntity *e)
 	}else
 #endif
 		e->Render();
+
+		POP_RENDERGROUP();
 	}
 }
 
@@ -213,6 +221,8 @@ CRenderer::RenderOneNonRoad(CEntity *e)
 	}
 #endif
 
+	PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+
 	resetLights = e->SetupLighting();
 
 	if(e->IsVehicle())
@@ -246,6 +256,8 @@ CRenderer::RenderOneNonRoad(CEntity *e)
 	}
 
 	e->RemoveLighting(resetLights);
+
+	POP_RENDERGROUP();
 }
 
 void
@@ -271,6 +283,7 @@ CRenderer::RenderRoads(void)
 	int i;
 	CTreadable *t;
 
+	PUSH_RENDERGROUP("CRenderer::RenderRoads");
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	BACKFACE_CULLING_ON;
 	DeActivateDirectional();
@@ -296,6 +309,7 @@ CRenderer::RenderRoads(void)
 #endif
 		}
 	}
+	POP_RENDERGROUP();
 }
 
 void
@@ -306,6 +320,7 @@ CRenderer::RenderEverythingBarRoads(void)
 	CVector dist;
 	EntityInfo ei;
 
+	PUSH_RENDERGROUP("CRenderer::RenderEverythingBarRoads");
 	BACKFACE_CULLING_ON;
 	gSortedVehiclesAndPeds.Clear();
 
@@ -337,6 +352,7 @@ CRenderer::RenderEverythingBarRoads(void)
 		}else
 			RenderOneNonRoad(e);
 	}
+	POP_RENDERGROUP();
 }
 
 void
@@ -361,6 +377,7 @@ CRenderer::RenderBoats(void)
 {
 	CLink<EntityInfo> *node;
 
+	PUSH_RENDERGROUP("CRenderer::RenderBoats");
 	BACKFACE_CULLING_ON;
 
 	for(node = gSortedVehiclesAndPeds.tail.prev;
@@ -371,6 +388,7 @@ CRenderer::RenderBoats(void)
 		if(v->IsBoat())
 			RenderOneNonRoad(v);
 	}
+	POP_RENDERGROUP();
 }
 
 #ifdef NEW_RENDERER
@@ -416,314 +434,6 @@ SetStencilState(int state)
 	}
 }
 
-#ifdef RW_D3D9
-struct BuildingInst
-{
-	rw::RawMatrix combinedMat;
-	rw::d3d9::InstanceDataHeader *instHeader;
-	uint8 fadeAlpha;
-	bool lighting;
-};
-static BuildingInst blendInsts[3][2000];
-static int numBlendInsts[3];
-
-static void
-SetMatrix(BuildingInst *building, rw::Matrix *worldMat)
-{
-	using namespace rw;
-	RawMatrix world, worldview;
-	Camera *cam = engine->currentCamera;
-	convMatrix(&world, worldMat);
-	RawMatrix::mult(&worldview, &world, &cam->devView);
-	RawMatrix::mult(&building->combinedMat, &worldview, &cam->devProj);
-}
-
-static bool
-IsTextureTransparent(RwTexture *tex)
-{
-	if(tex == nil || tex->raster == nil)
-		return false;
-	return PLUGINOFFSET(rw::d3d::D3dRaster, tex->raster, rw::d3d::nativeRasterOffset)->hasAlpha;
-}
-
-// Render all opaque meshes and put atomics that needs blending
-// into the deferred list.
-static void
-AtomicFirstPass(RpAtomic *atomic, int pass)
-{
-	using namespace rw;
-	using namespace rw::d3d;
-	using namespace rw::d3d9;
-
-	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
-
-	atomic->getPipeline()->instance(atomic);
-	building->instHeader = (d3d9::InstanceDataHeader*)atomic->geometry->instData;
-	assert(building->instHeader != nil);
-	assert(building->instHeader->platform == PLATFORM_D3D9);
-	building->fadeAlpha = 255;
-	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
-
-	bool setupDone = false;
-	bool defer = false;
-	SetMatrix(building, atomic->getFrame()->getLTM());
-
-	InstanceData *inst = building->instHeader->inst;
-	for(rw::uint32 i = 0; i < building->instHeader->numMeshes; i++, inst++){
-		Material *m = inst->material;
-
-		if(inst->vertexAlpha || m->color.alpha != 255 ||
-		   IsTextureTransparent(m->texture)){
-			defer = true;
-			continue;
-		}
-
-		// alright we're rendering this atomic
-		if(!setupDone){
-			setStreamSource(0, building->instHeader->vertexStream[0].vertexBuffer, 0, building->instHeader->vertexStream[0].stride);
-			setIndices(building->instHeader->indexBuffer);
-			setVertexDeclaration(building->instHeader->vertexDeclaration);
-			setVertexShader(default_amb_VS);
-			d3ddevice->SetVertexShaderConstantF(VSLOC_combined, (float*)&building->combinedMat, 4);
-			if(building->lighting)
-				setAmbient(pAmbient->color);
-			else
-				setAmbient(black);
-			setupDone = true;
-		}
-
-		setMaterial(m->color, m->surfaceProps);
-
-		if(m->texture){
-			d3d::setTexture(0, m->texture);
-			setPixelShader(default_tex_PS);
-		}else
-			setPixelShader(default_PS);
-
-		drawInst(building->instHeader, inst);
-	}
-	if(defer)
-		numBlendInsts[pass]++;
-}
-
-static void
-AtomicFullyTransparent(RpAtomic *atomic, int pass, int fadeAlpha)
-{
-	using namespace rw;
-	using namespace rw::d3d;
-	using namespace rw::d3d9;
-
-	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
-
-	atomic->getPipeline()->instance(atomic);
-	building->instHeader = (d3d9::InstanceDataHeader*)atomic->geometry->instData;
-	assert(building->instHeader != nil);
-	assert(building->instHeader->platform == PLATFORM_D3D9);
-	building->fadeAlpha = fadeAlpha;
-	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
-	SetMatrix(building, atomic->getFrame()->getLTM());
-	numBlendInsts[pass]++;
-}
-
-static void
-RenderBlendPass(int pass)
-{
-	using namespace rw;
-	using namespace rw::d3d;
-	using namespace rw::d3d9;
-
-	setVertexShader(default_amb_VS);
-
-	int i;
-	for(i = 0; i < numBlendInsts[pass]; i++){
-		BuildingInst *building = &blendInsts[pass][i];
-
-		setStreamSource(0, building->instHeader->vertexStream[0].vertexBuffer, 0, building->instHeader->vertexStream[0].stride);
-		setIndices(building->instHeader->indexBuffer);
-		setVertexDeclaration(building->instHeader->vertexDeclaration);
-		d3ddevice->SetVertexShaderConstantF(VSLOC_combined, (float*)&building->combinedMat, 4);
-		if(building->lighting)
-			setAmbient(pAmbient->color);
-		else
-			setAmbient(black);
-
-		InstanceData *inst = building->instHeader->inst;
-		for(rw::uint32 j = 0; j < building->instHeader->numMeshes; j++, inst++){
-			Material *m = inst->material;
-			if(!inst->vertexAlpha && m->color.alpha == 255 && !IsTextureTransparent(m->texture) && building->fadeAlpha == 255)
-				continue;	// already done this one
-
-			rw::RGBA color = m->color;
-			color.alpha = (color.alpha * building->fadeAlpha)/255;
-			setMaterial(color, m->surfaceProps);
-
-			if(m->texture){
-				d3d::setTexture(0, m->texture);
-				setPixelShader(default_tex_PS);
-			}else
-				setPixelShader(default_PS);
-
-			drawInst(building->instHeader, inst);
-		}
-	}
-}
-#endif
-#ifdef RW_GL3
-struct BuildingInst
-{
-	rw::Matrix matrix;
-	rw::gl3::InstanceDataHeader *instHeader;
-	uint8 fadeAlpha;
-	bool lighting;
-};
-static BuildingInst blendInsts[3][2000];
-static int numBlendInsts[3];
-
-static bool
-IsTextureTransparent(RwTexture *tex)
-{
-	if(tex == nil || tex->raster == nil)
-		return false;
-	return PLUGINOFFSET(rw::gl3::Gl3Raster, tex->raster, rw::gl3::nativeRasterOffset)->hasAlpha;
-}
-
-// Render all opaque meshes and put atomics that needs blending
-// into the deferred list.
-static void
-AtomicFirstPass(RpAtomic *atomic, int pass)
-{
-	using namespace rw;
-	using namespace rw::gl3;
-
-	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
-
-	atomic->getPipeline()->instance(atomic);
-	building->instHeader = (gl3::InstanceDataHeader*)atomic->geometry->instData;
-	assert(building->instHeader != nil);
-	assert(building->instHeader->platform == PLATFORM_GL3);
-	building->fadeAlpha = 255;
-	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
-
-	WorldLights lights;
-	lights.numAmbients = 1;
-	lights.numDirectionals = 0;
-	lights.numLocals = 0;
-	if(building->lighting)
-		lights.ambient = pAmbient->color;
-	else
-		lights.ambient = black;
-
-	bool setupDone = false;
-	bool defer = false;
-	building->matrix = *atomic->getFrame()->getLTM();
-
-	InstanceData *inst = building->instHeader->inst;
-	for(rw::uint32 i = 0; i < building->instHeader->numMeshes; i++, inst++){
-		Material *m = inst->material;
-
-		if(inst->vertexAlpha || m->color.alpha != 255 ||
-		   IsTextureTransparent(m->texture)){
-			defer = true;
-			continue;
-		}
-
-		// alright we're rendering this atomic
-		if(!setupDone){
-			defaultShader->use();
-			setWorldMatrix(&building->matrix);
-#ifdef RW_GL_USE_VAOS
-			glBindVertexArray(building->instHeader->vao);
-#else
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, building->instHeader->ibo);
-			glBindBuffer(GL_ARRAY_BUFFER, building->instHeader->vbo);
-			setAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
-#endif
-			setLights(&lights);
-			setupDone = true;
-		}
-
-		setMaterial(m->color, m->surfaceProps);
-
-		setTexture(0, m->texture);
-
-		drawInst(building->instHeader, inst);
-	}
-#ifndef RW_GL_USE_VAOS
-	disableAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
-#endif
-	if(defer)
-		numBlendInsts[pass]++;
-}
-
-static void
-AtomicFullyTransparent(RpAtomic *atomic, int pass, int fadeAlpha)
-{
-	using namespace rw;
-	using namespace rw::gl3;
-
-	BuildingInst *building = &blendInsts[pass][numBlendInsts[pass]];
-
-	atomic->getPipeline()->instance(atomic);
-	building->instHeader = (gl3::InstanceDataHeader*)atomic->geometry->instData;
-	assert(building->instHeader != nil);
-	assert(building->instHeader->platform == PLATFORM_GL3);
-	building->fadeAlpha = fadeAlpha;
-	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
-	building->matrix = *atomic->getFrame()->getLTM();
-	numBlendInsts[pass]++;
-}
-
-static void
-RenderBlendPass(int pass)
-{
-	using namespace rw;
-	using namespace rw::gl3;
-
-	defaultShader->use();
-	WorldLights lights;
-	lights.numAmbients = 1;
-	lights.numDirectionals = 0;
-	lights.numLocals = 0;
-
-	int i;
-	for(i = 0; i < numBlendInsts[pass]; i++){
-		BuildingInst *building = &blendInsts[pass][i];
-
-#ifdef RW_GL_USE_VAOS
-		glBindVertexArray(building->instHeader->vao);
-#else
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, building->instHeader->ibo);
-		glBindBuffer(GL_ARRAY_BUFFER, building->instHeader->vbo);
-		setAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
-#endif
-		setWorldMatrix(&building->matrix);
-		if(building->lighting)
-			lights.ambient = pAmbient->color;
-		else
-			lights.ambient = black;
-		setLights(&lights);
-
-		InstanceData *inst = building->instHeader->inst;
-		for(rw::uint32 j = 0; j < building->instHeader->numMeshes; j++, inst++){
-			Material *m = inst->material;
-			if(!inst->vertexAlpha && m->color.alpha == 255 && !IsTextureTransparent(m->texture) && building->fadeAlpha == 255)
-				continue;	// already done this one
-
-			rw::RGBA color = m->color;
-			color.alpha = (color.alpha * building->fadeAlpha)/255;
-			setMaterial(color, m->surfaceProps);
-
-			setTexture(0, m->texture);
-
-			drawInst(building->instHeader, inst);
-		}
-#ifndef RW_GL_USE_VAOS
-		disableAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
-#endif
-	}
-}
-#endif
-
 void
 CRenderer::RenderOneBuilding(CEntity *ent, float camdist)
 {
@@ -735,6 +445,14 @@ CRenderer::RenderOneBuilding(CEntity *ent, float camdist)
 	assert(RwObjectGetType(ent->m_rwObject) == rpATOMIC);
 	RpAtomic *atomic = (RpAtomic*)ent->m_rwObject;
 	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(ent->GetModelIndex());
+
+#ifdef EXTRA_MODEL_FLAGS
+	bool resetCull = false;
+	if(!ent->IsBuilding() || mi->RenderDoubleSided()){
+		resetCull = true;
+		BACKFACE_CULLING_OFF;
+	}
+#endif
 
 	int pass = PASS_BLEND;
 	if(mi->m_additive)	// very questionable
@@ -754,16 +472,21 @@ CRenderer::RenderOneBuilding(CEntity *ent, float camdist)
 		alpha = mi->m_alpha * fadefactor;
 
 		if(alpha == 255)
-			AtomicFirstPass(atomic, pass);
+			WorldRender::AtomicFirstPass(atomic, pass);
 		else{
 			// not quite sure what this is about, do we have to do that?
 			RpGeometry *geo = RpAtomicGetGeometry(lodatm);
 			if(geo != RpAtomicGetGeometry(atomic))
 				RpAtomicSetGeometry(atomic, geo, rpATOMICSAMEBOUNDINGSPHERE);
-			AtomicFullyTransparent(atomic, pass, alpha);
+			WorldRender::AtomicFullyTransparent(atomic, pass, alpha);
 		}
 	}else
-		AtomicFirstPass(atomic, pass);
+		WorldRender::AtomicFirstPass(atomic, pass);
+
+#ifdef EXTRA_MODEL_FLAGS
+	if(resetCull)
+		BACKFACE_CULLING_ON;
+#endif
 
 	ent->bImBeingRendered = false;	// TODO: this seems wrong, but do we even need it?
 }
@@ -776,6 +499,7 @@ CRenderer::RenderWorld(int pass)
 	CLink<CVisibilityPlugins::AlphaObjectInfo> *node;
 
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+	BACKFACE_CULLING_ON;
 	DeActivateDirectional();
 	SetAmbientColours();
 
@@ -783,9 +507,19 @@ CRenderer::RenderWorld(int pass)
 	switch(pass){
 	case 0:
 		// Roads
+		PUSH_RENDERGROUP("CRenderer::RenderWorld - Roads");
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+/*
 		for(i = 0; i < ms_nNoOfVisibleBuildings; i++){
 			e = ms_aVisibleBuildingPtrs[i];
+			if(e->bIsBIGBuilding || IsRoad(e))
+				RenderOneBuilding(e);
+		}
+*/
+		for(CLink<EntityInfo> *node = gSortedBuildings.tail.prev;
+		    node != &gSortedBuildings.head;
+		    node = node->prev){
+			e = node->item.ent;
 			if(e->bIsBIGBuilding || IsRoad(e))
 				RenderOneBuilding(e);
 		}
@@ -801,14 +535,25 @@ CRenderer::RenderWorld(int pass)
 		// only very temporary, there are more rendering issues
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		RenderBlendPass(PASS_BLEND);
-		numBlendInsts[PASS_BLEND] = 0;
+		WorldRender::RenderBlendPass(PASS_BLEND);
+		WorldRender::numBlendInsts[PASS_BLEND] = 0;
+		POP_RENDERGROUP();
 		break;
 	case 1:
 		// Opaque
+		PUSH_RENDERGROUP("CRenderer::RenderWorld - Opaque");
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+/*
 		for(i = 0; i < ms_nNoOfVisibleBuildings; i++){
 			e = ms_aVisibleBuildingPtrs[i];
+			if(!(e->bIsBIGBuilding || IsRoad(e)))
+				RenderOneBuilding(e);
+		}
+*/
+		for(CLink<EntityInfo> *node = gSortedBuildings.tail.prev;
+		    node != &gSortedBuildings.head;
+		    node = node->prev){
+			e = node->item.ent;
 			if(!(e->bIsBIGBuilding || IsRoad(e)))
 				RenderOneBuilding(e);
 		}
@@ -824,16 +569,19 @@ CRenderer::RenderWorld(int pass)
 
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
-		RenderBlendPass(PASS_NOZ);
+		WorldRender::RenderBlendPass(PASS_NOZ);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+		POP_RENDERGROUP();
 		break;
 	case 2:
 		// Transparent
+		PUSH_RENDERGROUP("CRenderer::RenderWorld - Transparent");
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
-		RenderBlendPass(PASS_ADD);
+		WorldRender::RenderBlendPass(PASS_ADD);
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-		RenderBlendPass(PASS_BLEND);
+		WorldRender::RenderBlendPass(PASS_BLEND);
+		POP_RENDERGROUP();
 		break;
 	}
 }
@@ -844,11 +592,13 @@ CRenderer::RenderPeds(void)
 	int i;
 	CEntity *e;
 
+	PUSH_RENDERGROUP("CRenderer::RenderPeds");
 	for(i = 0; i < ms_nNoOfVisibleVehicles; i++){
 		e = ms_aVisibleVehiclePtrs[i];
 		if(e->IsPed())
 			RenderOneNonRoad(e);
 	}
+	POP_RENDERGROUP();
 }
 
 void
@@ -859,6 +609,7 @@ CRenderer::RenderVehicles(void)
 	EntityInfo ei;
 	CLink<EntityInfo> *node;
 
+	PUSH_RENDERGROUP("CRenderer::RenderVehicles");
 	// not the real thing
 	for(i = 0; i < ms_nNoOfVisibleVehicles; i++){
 		e = ms_aVisibleVehiclePtrs[i];
@@ -875,6 +626,7 @@ CRenderer::RenderVehicles(void)
 	    node != &gSortedVehiclesAndPeds.head;
 	    node = node->prev)
 		RenderOneNonRoad(node->item.ent);
+	POP_RENDERGROUP();
 }
 
 void
@@ -883,6 +635,7 @@ CRenderer::RenderWater(void)
 	int i;
 	CEntity *e;
 
+	PUSH_RENDERGROUP("CRenderer::RenderWater");
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
@@ -906,6 +659,7 @@ CRenderer::RenderWater(void)
 	CWaterLevel::RenderWater();
 
 	SetStencilState(0);
+	POP_RENDERGROUP();
 }
 
 void
@@ -916,21 +670,24 @@ CRenderer::ClearForFrame(void)
 	ms_nNoOfVisibleBuildings = 0;
 	ms_nNoOfInVisibleEntities = 0;
 	gSortedVehiclesAndPeds.Clear();
+	gSortedBuildings.Clear();
 
-	numBlendInsts[PASS_NOZ] = 0;
-	numBlendInsts[PASS_ADD] = 0;
-	numBlendInsts[PASS_BLEND] = 0;
+	WorldRender::numBlendInsts[PASS_NOZ] = 0;
+	WorldRender::numBlendInsts[PASS_ADD] = 0;
+	WorldRender::numBlendInsts[PASS_BLEND] = 0;
 }
 #endif
 
 void
 CRenderer::RenderFadingInEntities(void)
 {
+	PUSH_RENDERGROUP("CRenderer::RenderFadingInEntities");
 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
 	BACKFACE_CULLING_ON;
 	DeActivateDirectional();
 	SetAmbientColours();
 	CVisibilityPlugins::RenderFadingEntities();
+	POP_RENDERGROUP();
 }
 
 void
@@ -1704,13 +1461,21 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 void
 CRenderer::InsertEntityIntoList(CEntity *ent)
 {
+#ifdef FIX_BUGS
+	if (!ent->m_rwObject) return;
+#endif
+
 #ifdef NEW_RENDERER
 	// TODO: there are more flags being checked here
 	if(gbNewRenderer && (ent->IsVehicle() || ent->IsPed()))
 		ms_aVisibleVehiclePtrs[ms_nNoOfVisibleVehicles++] = ent;
-	else if(gbNewRenderer && ent->IsBuilding())
-		ms_aVisibleBuildingPtrs[ms_nNoOfVisibleBuildings++] = ent;
-	else
+	else if(gbNewRenderer && ent->IsBuilding()){
+		EntityInfo info;
+		info.ent = ent;
+		info.sort = -(ent->GetPosition() - ms_vecCameraPosition).MagnitudeSqr();
+		gSortedBuildings.InsertSorted(info);
+//		ms_aVisibleBuildingPtrs[ms_nNoOfVisibleBuildings++] = ent;
+	}else
 #endif
 		ms_aVisibleEntityPtrs[ms_nNoOfVisibleEntities++] = ent;
 }
@@ -1727,7 +1492,7 @@ CRenderer::ScanBigBuildingList(CPtrList &list)
 		// all missing from game actually
 		TestedBigBuildings++;
 #endif
-		if(!ent->bZoneCulled){
+		if(!ent->bZoneCulled || gbDisableZoneCull){
 			if(SetupBigBuildingVisibility(ent) == VIS_VISIBLE)
 				InsertEntityIntoList(ent);
 #ifndef MASTER

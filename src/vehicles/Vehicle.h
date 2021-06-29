@@ -3,8 +3,9 @@
 #include "Physical.h"
 #include "AutoPilot.h"
 #include "ModelIndices.h"
-#include "AnimManager.h"
-#include "Weapon.h"
+#include "AnimationId.h"
+#include "WeaponType.h"
+#include "Collision.h"
 
 class CPed;
 class CFire;
@@ -181,7 +182,7 @@ public:
 	float m_fMapObjectHeightBehind;	// rear Z?
 	eCarLock m_nDoorLock;
 	int8 m_nLastWeaponDamage; // see eWeaponType, -1 if no damage
-	int8 m_nRadioStation;
+	uint8 m_nRadioStation;
 	uint8 m_bRainAudioCounter;
 	uint8 m_bRainSamplesCounter;
 	uint8 m_nCarHornTimer;
@@ -192,10 +193,10 @@ public:
 	float m_fSteerInput;
 	eVehicleType m_vehType;
 
-	static void *operator new(size_t);
-	static void *operator new(size_t sz, int slot);
-	static void operator delete(void*, size_t);
-	static void operator delete(void*, int);
+	static void *operator new(size_t) throw();
+	static void *operator new(size_t sz, int slot) throw();
+	static void operator delete(void*, size_t) throw();
+	static void operator delete(void*, int) throw();
 
 	CVehicle(void) {}	// FAKE
 	CVehicle(uint8 CreatedBy);
@@ -275,7 +276,7 @@ public:
 #endif
 	CVehicleModelInfo* GetModelInfo() { return (CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex()); }
 	bool IsTaxi(void) { return GetModelIndex() == MI_TAXI || GetModelIndex() == MI_CABBIE || GetModelIndex() == MI_BORGNINE; }
-	AnimationId GetDriverAnim(void) { return IsCar() && bLowVehicle ? ANIM_CAR_LSIT : (IsBoat() && GetModelIndex() != MI_SPEEDER ? ANIM_DRIVE_BOAT : ANIM_CAR_SIT); }
+	AnimationId GetDriverAnim(void) { return IsCar() && bLowVehicle ? ANIM_STD_CAR_SIT_LO : (IsBoat() && GetModelIndex() != MI_SPEEDER ? ANIM_STD_BOAT_DRIVE : ANIM_STD_CAR_SIT); }
 
 	static bool bWheelsOnlyCheat;
 	static bool bAllDodosCheat;

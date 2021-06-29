@@ -213,7 +213,7 @@ CCamera::Init(void)
 	m_iModeToGoTo = CCam::MODE_FOLLOWPED;
 	m_bJust_Switched = false;
 	m_bUseTransitionBeta = false;
-	m_matrix.SetScale(1.0f);
+	GetMatrix().SetScale(1.0f);
 	m_bTargetJustBeenOnTrain = false;
 	m_bInitialNoNodeStaticsSet = false;
 	m_uiLongestTimeInMill = 5000;
@@ -661,7 +661,7 @@ CCamera::Process(void)
 
 	// Process Shake
 	float shakeStrength = m_fCamShakeForce - 0.28f*(CTimer::GetTimeInMilliseconds()-m_uiCamShakeStart)/1000.0f;
-	shakeStrength = clamp(shakeStrength, 0.0f, 2.0f);
+	shakeStrength = Clamp(shakeStrength, 0.0f, 2.0f);
 	int shakeRand = CGeneral::GetRandomNumber();
 	float shakeOffset = shakeStrength*0.1f;
 	GetMatrix().GetPosition().x += shakeOffset * ((shakeRand & 0xF) - 7);
@@ -1877,7 +1877,7 @@ CCamera::CamShake(float strength, float x, float y, float z)
 
 	float curForce = mult*(m_fCamShakeForce - (CTimer::GetTimeInMilliseconds() - m_uiCamShakeStart)/1000.0f);
 	strength = mult*strength;
-	if(clamp(curForce, 0.0f, 2.0f) < strength){
+	if(Clamp(curForce, 0.0f, 2.0f) < strength){
 		m_fCamShakeForce = strength;
 		m_uiCamShakeStart = CTimer::GetTimeInMilliseconds();
 	}
@@ -1888,7 +1888,7 @@ void
 CamShakeNoPos(CCamera *cam, float strength)
 {
 	float curForce = cam->m_fCamShakeForce - (CTimer::GetTimeInMilliseconds() - cam->m_uiCamShakeStart)/1000.0f;
-	if(clamp(curForce, 0.0f, 2.0f) < strength){
+	if(Clamp(curForce, 0.0f, 2.0f) < strength){
 		cam->m_fCamShakeForce = strength;
 		cam->m_uiCamShakeStart = CTimer::GetTimeInMilliseconds();
 	}
@@ -2212,7 +2212,7 @@ CCamera::StartTransition(int16 newMode)
 		while(deltaBeta < -PI) deltaBeta += 2*PI;
 		deltaBeta = Abs(deltaBeta);
 
-		door = FindPlayerPed()->m_vehEnterType;
+		door = FindPlayerPed()->m_vehDoor;
 		if(deltaBeta > HALFPI){
 			if(((CPed*)pTargetEntity)->m_carInObjective){
 				if(((CPed*)pTargetEntity)->m_carInObjective->IsUpsideDown()){
@@ -2293,7 +2293,7 @@ CCamera::StartTransition(int16 newMode)
 		}
 #endif
 
-		door = FindPlayerPed()->m_vehEnterType;
+		door = FindPlayerPed()->m_vehDoor;
 		if(deltaBeta > HALFPI){
 			if(((CVehicle*)pTargetEntity)->IsUpsideDown()){
 				if(door == CAR_DOOR_LF || door == CAR_DOOR_LR)	// BUG: game checks LF twice
@@ -2783,7 +2783,7 @@ CCamera::TryToStartNewCamMode(int obbeMode)
 		if (CReplay::IsPlayingBack())
 			return false;
 #endif
-		if(FindPlayerPed()->m_pWanted->m_nWantedLevel < 1)
+		if(FindPlayerPed()->m_pWanted->GetWantedLevel() < 1)
 			return false;
 		if(FindPlayerVehicle() == nil)
 			return false;
@@ -2811,7 +2811,7 @@ CCamera::TryToStartNewCamMode(int obbeMode)
 		if (CReplay::IsPlayingBack())
 			return false;
 #endif
-		if(FindPlayerPed()->m_pWanted->m_nWantedLevel < 1)
+		if(FindPlayerPed()->m_pWanted->GetWantedLevel() < 1)
 			return false;
 		if(FindPlayerVehicle() == nil)
 			return false;
@@ -3572,7 +3572,7 @@ CCamera::Find3rdPersonCamTargetVector(float dist, CVector pos, CVector &source, 
 float
 CCamera::Find3rdPersonQuickAimPitch(void)
 {
-	float clampedFrontZ = clamp(Cams[ActiveCam].Front.z, -1.0f, 1.0f);
+	float clampedFrontZ = Clamp(Cams[ActiveCam].Front.z, -1.0f, 1.0f);
 
 	float rot = Asin(clampedFrontZ);
 
@@ -3592,7 +3592,7 @@ CCamera::SetRwCamera(RwCamera *cam)
 void
 CCamera::CalculateDerivedValues(void)
 {
-	m_cameraMatrix = Invert(m_matrix);
+	m_cameraMatrix = Invert(GetMatrix());
 
 	float hfov = DEGTORAD(CDraw::GetScaledFOV()/2.0f);
 	float c = Cos(hfov);
@@ -3629,9 +3629,17 @@ CCamera::CalculateDerivedValues(void)
 bool
 CCamera::IsPointVisible(const CVector &center, const CMatrix *mat)
 {
-	RwV3d c;
-	c = center;
-	RwV3dTransformPoints(&c, &c, 1, &mat->m_matrix);
+#ifdef GTA_PS2
+	CVuVector c;
+	TransformPoint(c, *mat, center);
+#else
+	CVector c = center;
+	#ifdef FIX_BUGS
+		c = *mat * center;
+	#else
+		RwV3dTransformPoints(&c, &c, 1, (RwMatrix*)mat);
+	#endif
+#endif
 	if(c.y < CDraw::GetNearClipZ()) return false;
 	if(c.y > CDraw::GetFarClipZ()) return false;
 	if(c.x*m_vecFrustumNormals[0].x + c.y*m_vecFrustumNormals[0].y > 0.0f) return false;
@@ -3642,11 +3650,19 @@ CCamera::IsPointVisible(const CVector &center, const CMatrix *mat)
 }
 
 bool
-CCamera::IsSphereVisible(const CVector &center, float radius, const CMatrix *mat)
+CCamera::IsSphereVisible(const CVector &center, float radius, Const CMatrix *mat)
 {
-	RwV3d c;
-	c = center;
-	RwV3dTransformPoints(&c, &c, 1, &mat->m_matrix);
+#ifdef GTA_PS2
+	CVuVector c;
+	TransformPoint(c, *mat, center);
+#else
+	CVector c = center;
+	#ifdef FIX_BUGS
+		c = *mat * center;
+	#else
+		RwV3dTransformPoints(&c, &c, 1, (RwMatrix*)mat);
+	#endif
+#endif
 	if(c.y + radius < CDraw::GetNearClipZ()) return false;
 	if(c.y - radius > CDraw::GetFarClipZ()) return false;
 	if(c.x*m_vecFrustumNormals[0].x + c.y*m_vecFrustumNormals[0].y > radius) return false;
@@ -3659,16 +3675,31 @@ CCamera::IsSphereVisible(const CVector &center, float radius, const CMatrix *mat
 bool
 CCamera::IsSphereVisible(const CVector &center, float radius)
 {
-	CMatrix mat = m_cameraMatrix;
+#if GTA_VERSION < GTA3_PC_10	// not sure this condition is the right one
+	// Maybe this was a copy of the other function with m_cameraMatrix
+	return IsSphereVisible(center, radius, &m_cameraMatrix);
+#else
+	// ...and on PC they decided to call the other one with a default matrix.
+	CMatrix mat(GetCameraMatrix());	// this matrix construction is stupid and gone in VC
 	return IsSphereVisible(center, radius, &mat);
+#endif
 }
 
 bool
-CCamera::IsBoxVisible(RwV3d *box, const CMatrix *mat)
+CCamera::IsBoxVisible(CVUVECTOR *box, const CMatrix *mat)
 {
 	int i;
 	int frustumTests[6] = { 0 };
-	RwV3dTransformPoints(box, box, 8, &mat->m_matrix);
+#ifdef GTA_PS2
+	TransformPoints(box, 8, *mat, box);
+#else
+	#ifdef FIX_BUGS
+		for (i = 0; i < 8; i++)
+			box[i] = *mat * box[i];
+	#else
+		RwV3dTransformPoints(box, box, 8, (RwMatrix*)mat);
+	#endif
+#endif
 
 	for(i = 0; i < 8; i++){
 		if(box[i].y < CDraw::GetNearClipZ()) frustumTests[0]++;

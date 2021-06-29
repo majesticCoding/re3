@@ -13,6 +13,7 @@
 #include "RpAnimBlend.h"
 #include "AnimBlendAssociation.h"
 #include "soundlist.h"
+#include "SaveBuf.h"
 #ifdef FIX_BUGS
 #include "Replay.h"
 #endif
@@ -40,7 +41,6 @@ bool
 isPhoneAvailable(int m_phoneId)
 {
 	return crimeReporters[m_phoneId] == nil || !crimeReporters[m_phoneId]->IsPointerValid() || crimeReporters[m_phoneId]->m_objective > OBJECTIVE_WAIT_ON_FOOT ||
-			crimeReporters[m_phoneId]->m_nLastPedState != PED_SEEK_POS &&
 			(crimeReporters[m_phoneId]->m_nPedState != PED_MAKE_CALL && crimeReporters[m_phoneId]->m_nPedState != PED_FACE_PHONE && crimeReporters[m_phoneId]->m_nPedState != PED_SEEK_POS);
 }
 #endif
@@ -59,9 +59,9 @@ CPhoneInfo::Update(void)
 		TheCamera.SetWideScreenOff();
 		pPhoneDisplayingMessages = nil;
 		bDisplayingPhoneMessage = false;
-		CAnimBlendAssociation *talkAssoc = RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_PHONE_TALK);
+		CAnimBlendAssociation *talkAssoc = RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_STD_PHONE_TALK);
 		if (talkAssoc && talkAssoc->blendAmount > 0.5f) {
-			CAnimBlendAssociation *endAssoc = CAnimManager::BlendAnimation(player->GetClump(), ASSOCGRP_STD, ANIM_PHONE_OUT, 8.0f);
+			CAnimBlendAssociation *endAssoc = CAnimManager::BlendAnimation(player->GetClump(), ASSOCGRP_STD, ANIM_STD_PHONE_OUT, 8.0f);
 			endAssoc->flags &= ~ASSOC_DELETEFADEDOUT;
 			endAssoc->SetFinishCallback(PhonePutDownCB, player);
 		} else {
@@ -118,7 +118,7 @@ CPhoneInfo::Update(void)
 								CPad::GetPad(0)->SetDisablePlayerControls(PLAYERCONTROL_PHONE);
 								TheCamera.SetWideScreenOn();
 								playerInfo->MakePlayerSafe(true);
-								CAnimBlendAssociation *phonePickAssoc = CAnimManager::BlendAnimation(player->GetClump(), ASSOCGRP_STD, ANIM_PHONE_IN, 4.0f);
+								CAnimBlendAssociation *phonePickAssoc = CAnimManager::BlendAnimation(player->GetClump(), ASSOCGRP_STD, ANIM_STD_PHONE_IN, 4.0f);
 								phonePickAssoc->SetFinishCallback(PhonePickUpCB, &m_aPhones[phoneId]);
 								bPickingUpPhone = true;
 								pCallBackPed = player;
@@ -213,8 +213,9 @@ void
 CPhoneInfo::Load(uint8 *buf, uint32 size)
 {
 INITSAVEBUF
-	int max = ReadSaveBuf<int32>(buf);
-	int scriptPhonesMax = ReadSaveBuf<int32>(buf);
+	int32 max, scriptPhonesMax;
+	ReadSaveBuf(&max, buf);
+	ReadSaveBuf(&scriptPhonesMax, buf);
 
 #ifdef PEDS_REPORT_CRIMES_ON_PHONE
 	m_nMax = Min(NUMPHONES, max);
@@ -224,7 +225,8 @@ INITSAVEBUF
 
 	// We can do it without touching saves. We'll only load script phones, others are already loaded in Initialise
 	for (int i = 0; i < 50; i++) {
-		CPhone phoneToLoad = ReadSaveBuf<CPhone>(buf);
+		CPhone phoneToLoad;
+		ReadSaveBuf(&phoneToLoad, buf);
 
 		if (ignoreOtherPhones)
 			continue;
@@ -250,7 +252,7 @@ INITSAVEBUF
 	m_nScriptPhonesMax = scriptPhonesMax;
 
 	for (int i = 0; i < NUMPHONES; i++) {
-		m_aPhones[i] = ReadSaveBuf<CPhone>(buf);
+		ReadSaveBuf(&m_aPhones[i], buf);
 		// It's saved as building pool index in save file, convert it to true entity
 		if (m_aPhones[i].m_pEntity) {
 			m_aPhones[i].m_pEntity = CPools::GetBuildingPool()->GetSlot((uintptr)m_aPhones[i].m_pEntity - 1);
@@ -443,10 +445,10 @@ PhonePickUpCB(CAnimBlendAssociation *assoc, void *arg)
 
 	CPed *ped = CPhoneInfo::pCallBackPed;
 	ped->m_nMoveState = PEDMOVE_STILL;
-	CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_IDLE_STANCE, 8.0f);
+	CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_STD_IDLE, 8.0f);
 
 	if (assoc->blendAmount > 0.5f && ped)
-		CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_PHONE_TALK, 8.0f);
+		CAnimManager::BlendAnimation(ped->GetClump(), ASSOCGRP_STD, ANIM_STD_PHONE_TALK, 8.0f);
 
 	CPhoneInfo::pCallBackPed = nil;
 }

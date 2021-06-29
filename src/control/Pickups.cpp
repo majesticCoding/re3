@@ -23,6 +23,7 @@
 #ifdef FIX_BUGS
 #include "Replay.h"
 #endif
+#include "SaveBuf.h"
 #include "Script.h"
 #include "Shadows.h"
 #include "SpecialFX.h"
@@ -129,7 +130,7 @@ CPickup::CanBePickedUp(CPlayerPed *player)
 	bool cannotBePickedUp =
 		(m_pObject->GetModelIndex() == MI_PICKUP_BODYARMOUR && player->m_fArmour > 99.5f)
 		|| (m_pObject->GetModelIndex() == MI_PICKUP_HEALTH && player->m_fHealth > 99.5f)
-		|| (m_pObject->GetModelIndex() == MI_PICKUP_BRIBE && player->m_pWanted->m_nWantedLevel == 0)
+		|| (m_pObject->GetModelIndex() == MI_PICKUP_BRIBE && player->m_pWanted->GetWantedLevel() == 0)
 		|| (m_pObject->GetModelIndex() == MI_PICKUP_KILLFRENZY && (CTheScripts::IsPlayerOnAMission() || CDarkel::FrenzyOnGoing() || !CGame::nastyGame));
 	return !cannotBePickedUp;
 }
@@ -456,7 +457,7 @@ CPickups::GivePlayerGoodiesWithPickUpMI(int16 modelIndex, int playerIndex)
 		DMAudio.PlayFrontEndSound(SOUND_PICKUP_BONUS, 0);
 		return true;
 	} else if (modelIndex == MI_PICKUP_BRIBE) {
-		int32 level = FindPlayerPed()->m_pWanted->m_nWantedLevel - 1;
+		int32 level = FindPlayerPed()->m_pWanted->GetWantedLevel() - 1;
 		if (level < 0) level = 0;
 		player->SetWantedLevel(level);
 		DMAudio.PlayFrontEndSound(SOUND_PICKUP_BONUS, 0);
@@ -689,8 +690,7 @@ CPickups::DoPickUpEffects(CEntity *entity)
 		entity->bDoNotRender = CTheScripts::IsPlayerOnAMission() || CDarkel::FrenzyOnGoing() || !CGame::nastyGame;
 
 	if (!entity->bDoNotRender) {
-		float s = Sin((float)((CTimer::GetTimeInMilliseconds() + (uintptr)entity) & 0x7FF) * DEGTORAD(360.0f / 0x800));
-		float modifiedSin = 0.3f * (s + 1.0f);
+		float modifiedSin = 0.3f * (Sin((float)((CTimer::GetTimeInMilliseconds() + (uintptr)entity) & 0x7FF) * DEGTORAD(360.0f / 0x800)) + 1.0f);
 
 
 		int16 colorId;
@@ -749,7 +749,20 @@ CPickups::DoPickUpEffects(CEntity *entity)
 			}
 		}
 
-		entity->GetMatrix().SetRotateZOnlyScaled((float)(CTimer::GetTimeInMilliseconds() & 0x7FF) * DEGTORAD(360.0f / 0x800), aWeaponScale[colorId]);
+		float angle = (float)(CTimer::GetTimeInMilliseconds() & 0x7FF) * DEGTORAD(360.0f / 0x800);
+		float c = Cos(angle) * aWeaponScale[colorId];
+		float s = Sin(angle) * aWeaponScale[colorId];
+
+		// we know from SA they were setting each field manually like this
+		entity->GetMatrix().rx = c;
+		entity->GetMatrix().ry = s;
+		entity->GetMatrix().rz = 0.0f;
+		entity->GetMatrix().fx = -s;
+		entity->GetMatrix().fy = c;
+		entity->GetMatrix().fz = 0.0f;
+		entity->GetMatrix().ux = 0.0f;
+		entity->GetMatrix().uy = 0.0f;
+		entity->GetMatrix().uz = aWeaponScale[colorId];
 	}
 }
 
@@ -987,18 +1000,18 @@ CPickups::Load(uint8 *buf, uint32 size)
 INITSAVEBUF
 
 	for (int32 i = 0; i < NUMPICKUPS; i++) {
-		aPickUps[i] = ReadSaveBuf<CPickup>(buf);
+		ReadSaveBuf(&aPickUps[i], buf);
 
 		if (aPickUps[i].m_eType != PICKUP_NONE && aPickUps[i].m_pObject != nil)
 			aPickUps[i].m_pObject = CPools::GetObjectPool()->GetSlot((uintptr)aPickUps[i].m_pObject - 1);
 	}
 
-	CollectedPickUpIndex = ReadSaveBuf<uint16>(buf);
-	ReadSaveBuf<uint16>(buf);
+	ReadSaveBuf(&CollectedPickUpIndex, buf);
+	SkipSaveBuf(buf, 2);
 	NumMessages = 0;
 
 	for (uint16 i = 0; i < NUMCOLLECTEDPICKUPS; i++)
-		aPickUpsCollected[i] = ReadSaveBuf<int32>(buf);
+		ReadSaveBuf(&aPickUpsCollected[i], buf);
 
 VALIDATESAVEBUF(size)
 }
@@ -1330,6 +1343,8 @@ CPacManPickups::Render()
 {
 	if (!bPMActive) return;
 
+	PUSH_RENDERGROUP("CPacManPickups::Render");
+
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
@@ -1363,6 +1378,8 @@ CPacManPickups::Render()
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, FALSE);
+
+	POP_RENDERGROUP();
 }
 
 void

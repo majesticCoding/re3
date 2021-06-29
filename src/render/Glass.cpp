@@ -1,4 +1,4 @@
-﻿#include "common.h"
+#include "common.h"
 
 #include "Glass.h"
 #include "Timer.h"
@@ -139,9 +139,9 @@ CFallingGlassPane::Render(void)
 	uint8 alpha = CGlass::CalcAlphaWithNormal(&fwdNorm);
 
 #ifdef FIX_BUGS
-	uint16 time = clamp(CTimer::GetTimeInMilliseconds() > m_nTimer ? CTimer::GetTimeInMilliseconds() - m_nTimer : 0u, 0u, 500u);
+	uint16 time = Clamp(CTimer::GetTimeInMilliseconds() > m_nTimer ? CTimer::GetTimeInMilliseconds() - m_nTimer : 0u, 0u, 500u);
 #else
-	uint16 time = clamp(CTimer::GetTimeInMilliseconds() - m_nTimer, 0, 500);
+	uint16 time = Clamp(CTimer::GetTimeInMilliseconds() - m_nTimer, 0, 500);
 #endif
 
 	uint8 color = int32( float(alpha) * (float(time) / 500) );
@@ -261,6 +261,8 @@ CGlass::Render(void)
 	RwRenderStateSet(rwRENDERSTATEDESTBLEND,         (void *)rwBLENDONE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)TRUE);
 
+	PUSH_RENDERGROUP("CGlass::Render");
+
 	for ( int32 i = 0; i < NUM_GLASSPANES; i++ )
 	{
 		if ( aGlassPanes[i].m_bActive )
@@ -269,6 +271,8 @@ CGlass::Render(void)
 
 	for ( uint32 i = 0; i < NumGlassEntities; i++ )
 		RenderEntityInGlass(apEntitiesToBeRendered[i]);
+
+	POP_RENDERGROUP();
 
 	NumGlassEntities = 0;
 

@@ -28,10 +28,10 @@ RwMemoryFunctions memFuncs = {
 
 #ifdef USE_CUSTOM_ALLOCATOR
 // game seems to be using heap directly here, but this is nicer
-void *operator new(size_t sz) { return MemoryMgrMalloc(sz); }
-void *operator new[](size_t sz) { return MemoryMgrMalloc(sz); }
-void operator delete(void *ptr) noexcept { MemoryMgrFree(ptr); }
-void operator delete[](void *ptr) noexcept { MemoryMgrFree(ptr); }
+void *operator new(size_t sz) throw() { return MemoryMgrMalloc(sz); }
+void *operator new[](size_t sz) throw() { return MemoryMgrMalloc(sz); }
+void operator delete(void *ptr) throw() { MemoryMgrFree(ptr); }
+void operator delete[](void *ptr) throw() { MemoryMgrFree(ptr); }
 #endif
 
 void*
@@ -93,7 +93,7 @@ MemoryMgrFree(void *ptr)
 void *
 RwMallocAlign(RwUInt32 size, RwUInt32 align)
 {
-#ifdef FIX_BUGS
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 	uintptr ptralign = align-1;
 	void *mem = (void *)MemoryMgrMalloc(size + sizeof(uintptr) + ptralign);
 
